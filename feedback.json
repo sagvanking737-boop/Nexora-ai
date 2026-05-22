@@ -1,0 +1,34 @@
+[
+  {
+    "id": "fb1",
+    "username": "Lehrerin_Sabine",
+    "avatar": "S",
+    "content": "Das Lehrer-Abo ist fantastisch! Endlich kann ich den Chatbot im Unterricht einsetzen, ohne mir Gedanken über Kostenlimits machen zu müssen. Die Oberfläche ist super strukturiert.",
+    "timestamp": "Vor 2 Stunden",
+    "role": "Lehrkraft"
+  },
+  {
+    "id": "fb2",
+    "username": "Lukas_Dev",
+    "avatar": "L",
+    "content": "Die Integration der neuen kostenlosen Modelle wie Gemma 2 und DeepSeek R1 ist genial. Vor allem die Ladezeiten sind extrem gut. Design erinnert angenehm an ChatGPT!",
+    "timestamp": "Vor 4 Stunden",
+    "role": "Entwickler"
+  },
+  {
+    "id": "fb3",
+    "username": "Max_Schuler",
+    "avatar": "M",
+    "content": "Die Apple-style Animationen fühlen sich mega flüssig an. Nexora AI ist ab jetzt mein täglicher Begleiter für die Hausaufgaben.",
+    "timestamp": "Vor 1 Tag",
+    "role": "Schüler"
+  },
+  {
+    "id": "fb4",
+    "username": "TechDirector",
+    "avatar": "T",
+    "content": "Sehr gelungener Showcase. Die Benutzeroberfläche ist extrem symmetrisch und aufgeräumt. Der Wechsel zwischen den Modellen klappt reibungslos.",
+    "timestamp": "Vor 2 Tagen",
+    "role": "Administrator"
+  }
+]

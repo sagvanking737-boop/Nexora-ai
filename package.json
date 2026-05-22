@@ -1,0 +1,19 @@
+{
+  "name": "nexora-ai",
+  "version": "1.0.0",
+  "description": "Nexora AI — Premium Chatbot Hub with Subscriptions and Feedback Chat",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "keywords": [
+    "ai",
+    "chatbot",
+    "express"
+  ],
+  "author": "Nexora Team",
+  "license": "ISC"
+}
