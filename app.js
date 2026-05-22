@@ -929,7 +929,7 @@ function init() {
   // Otherwise auth screen is shown by default (visible in HTML)
 }
 
-init();
+
 
 /* =============================================
    NEXORA UPGRADES (FEEDBACK & SUBSCRIPTION LOGIC)
@@ -1256,3 +1256,6 @@ async function simulateReply(userTarget) {
     console.warn('Simulation failed offline:', e);
   }
 }
+
+// Start application
+init();
