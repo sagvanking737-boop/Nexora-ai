@@ -1218,9 +1218,20 @@ html, body {
 }
 
 @media (max-width: 480px) {
-  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 50; }
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 50; max-width: 85vw; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
   .suggestions-grid { grid-template-columns: 1fr; }
   .welcome-title { font-size: 22px; }
+  
+  /* Fix chat input size on mobile */
+  .input-area { padding: 8px 10px 8px; }
+  .input-wrapper { border-radius: var(--radius-md); }
+  .input-toolbar-left, .input-toolbar-right { display: none; } /* Hide toolbar on mobile to save space */
+  .user-input { padding: 10px 14px; font-size: 14px; }
+  
+  /* Message bubbles */
+  .message.user { padding: 6px 12px; }
+  .message.assistant { padding: 10px 12px; }
+  .message-bubble { max-width: 95%; }
 }
 
 /* ==============================
