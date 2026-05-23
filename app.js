@@ -552,7 +552,8 @@ async function sendMessage() {
   if (!text || STATE.isStreaming) return;
 
   if (!STATE.settings.apiKey) {
-    showToast('Nexora AI wird konfiguriert... Bitte versuche es später erneut.', 'error');
+    showToast('Bitte gib deinen Nexora API Key in den Einstellungen ein. Kontaktiere den Besitzer für einen Key.', 'error');
+    openSettingsModal();
     return;
   }
 
