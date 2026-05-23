@@ -1228,6 +1228,21 @@ html, body {
   .input-toolbar-left, .input-toolbar-right { display: none; } /* Hide toolbar on mobile to save space */
   .user-input { padding: 10px 14px; font-size: 14px; }
   
+  /* Sidebar Overlay on mobile */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 40;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .sidebar.open ~ .sidebar-overlay {
+    display: block;
+    opacity: 1;
+  }
+  
   /* Message bubbles */
   .message.user { padding: 6px 12px; }
   .message.assistant { padding: 10px 12px; }
