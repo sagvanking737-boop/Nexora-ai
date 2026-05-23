@@ -552,8 +552,7 @@ async function sendMessage() {
   if (!text || STATE.isStreaming) return;
 
   if (!STATE.settings.apiKey) {
-    showToast('Bitte API-Key in den Einstellungen eingeben!', 'error');
-    openSettingsModal();
+    showToast('Nexora AI wird konfiguriert... Bitte versuche es später erneut.', 'error');
     return;
   }
 
@@ -638,12 +637,11 @@ async function sendMessage() {
     const isKeyErr = err.message.toLowerCase().includes('api') || err.message.toLowerCase().includes('key') || err.message.toLowerCase().includes('auth');
     let extra = '';
     if (isCreditsErr) {
-      extra = `<br><br>💳 <strong>Nicht genug Credits!</strong><br>
-        Dein OpenRouter-Guthaben reicht nicht für diese Anfrage.<br>
-        <b>Lösung 1:</b> Senke die <em>Max. Tokens</em> in den Einstellungen auf z.B. <strong>1024</strong>.<br>
-        <b>Lösung 2:</b> Lade dein Guthaben auf → <a href="https://openrouter.ai/credits" target="_blank" style="color:#19c37d;">openrouter.ai/credits</a>`;
+      extra = `<br><br>💳 <strong>Serverlimit erreicht!</strong><br>
+        Die maximale Anzahl an Anfragen wurde vorübergehend erreicht.<br>
+        <b>Lösung:</b> Versuche es in ein paar Minuten erneut oder wähle ein anderes KI-Modell.`;
     } else if (isKeyErr) {
-      extra = '<br><small>Überprüfe deinen API-Key in den Einstellungen.</small>';
+      extra = '<br><small>Nexora AI ist vorübergehend nicht erreichbar. Bitte versuche es gleich erneut.</small>';
     }
     streamEl.querySelector('.message-content').innerHTML =
       `<div style="color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:12px 16px;line-height:1.7;">
@@ -720,7 +718,7 @@ function updateModelBadge() {
     'meta-llama/llama-3-8b-instruct:free':'Llama 3 8B (Kostenlos)',
     'deepseek/deepseek-r1:free':         'DeepSeek R1 (Kostenlos)',
     'qwen/qwen-2.5-72b-instruct:free':   'Qwen 2.5 72B (Kostenlos)',
-    'openrouter/free':                   'Automatische freie KI',
+    'openrouter/free':                   'Nexora Auto',
   };
   els.modelBadge.textContent = names[STATE.settings.model] || STATE.settings.model;
 }
