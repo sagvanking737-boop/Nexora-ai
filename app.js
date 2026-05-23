@@ -914,6 +914,13 @@ function attachEvents() {
 }
 
 /* =============================================
+   SHARED STATE (must be declared before init)
+   ============================================= */
+
+let isFeedbackActive = false;
+let currentMode = 'general';
+
+/* =============================================
    INIT
    ============================================= */
 
@@ -935,8 +942,6 @@ function init() {
    NEXORA UPGRADES (FEEDBACK & SUBSCRIPTION LOGIC)
    ============================================= */
 
-let isFeedbackActive = false;
-let currentMode = 'general';
 
 /* =============================================
    MODE SYSTEM
