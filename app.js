@@ -106,6 +106,7 @@ const els = {
   app:               $('app'),
   sidebar:           $('sidebar'),
   toggleSidebar:     $('toggle-sidebar'),
+  mobileCloseSidebar:$('mobile-close-sidebar'),
   sidebarOverlay:    $('sidebar-overlay'),
   newChatBtn:        $('new-chat-btn'),
   chatList:          $('chat-list'),
@@ -778,6 +779,7 @@ function closeSidebarOnMobile() {
 function attachEvents() {
   // Sidebar
   els.toggleSidebar.addEventListener('click', () => els.sidebar.classList.toggle('open'));
+  if (els.mobileCloseSidebar) els.mobileCloseSidebar.addEventListener('click', () => els.sidebar.classList.remove('open'));
   if (els.sidebarOverlay) els.sidebarOverlay.addEventListener('click', () => els.sidebar.classList.remove('open'));
   els.newChatBtn.addEventListener('click', startNewChat);
 
