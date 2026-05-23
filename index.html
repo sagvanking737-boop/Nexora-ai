@@ -109,28 +109,28 @@
         <div class="model-selector-wrap">
           <label class="model-label">Modell</label>
           <select id="model-select" class="model-select">
-            <optgroup label="── Kostenlose KIs ──">
+            <optgroup label="── Nexora Free ──">
               <option value="google/gemma-2-9b-it:free">Gemma 2 9B (Kostenlos) 🟢</option>
               <option value="meta-llama/llama-3-8b-instruct:free">Llama 3 8B (Kostenlos) 🟢</option>
               <option value="deepseek/deepseek-r1:free">DeepSeek R1 (Kostenlos) 🧠</option>
               <option value="qwen/qwen-2.5-72b-instruct:free">Qwen 2.5 72B (Kostenlos) 🚀</option>
-              <option value="openrouter/free">Automatische freie KI ⚡</option>
+              <option value="openrouter/free">Nexora Auto ⚡</option>
             </optgroup>
-            <optgroup label="── Claude 4.7 ──">
+            <optgroup label="── Nexora Pro ──">
               <option value="anthropic/claude-sonnet-4-7" selected>Claude Sonnet 4.7 ⚡</option>
               <option value="anthropic/claude-haiku-4-7">Claude Haiku 4.7 🚀</option>
               <option value="anthropic/claude-opus-4-7">Claude Opus 4.7 🧠</option>
             </optgroup>
-            <optgroup label="── Claude 4.5 ──">
+            <optgroup label="── Nexora Premium ──">
               <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5</option>
               <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5</option>
               <option value="anthropic/claude-opus-4-5">Claude Opus 4.5</option>
             </optgroup>
-            <optgroup label="── Andere ──">
+            <optgroup label="── Weitere Modelle ──">
               <option value="anthropic/claude-3-7-sonnet">Claude 3.7 Sonnet</option>
               <option value="google/gemini-2.5-pro-preview">Gemini 2.5 Pro</option>
               <option value="openai/gpt-4o">GPT-4o</option>
-              <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (Free)</option>
+              <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
             </optgroup>
           </select>
         </div>
@@ -334,8 +334,8 @@
             </button>
           </div>
         </div>
-        <div class="setting-group">
-          <label class="setting-label">OpenRouter API Key</label>
+        <div class="setting-group" style="display:none;">
+          <label class="setting-label">API Key</label>
           <div class="api-key-input-wrap">
             <input type="password" id="api-key-input" class="setting-input" placeholder="sk-or-v1-..." />
             <button id="toggle-key-visibility" class="icon-btn small">
@@ -344,7 +344,7 @@
               </svg>
             </button>
           </div>
-          <span class="setting-hint">Dein API-Key wird nur lokal gespeichert.</span>
+          <span class="setting-hint">Intern verwaltet.</span>
         </div>
         <div class="setting-group">
           <label class="setting-label">System-Prompt</label>
