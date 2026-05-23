@@ -398,6 +398,10 @@ html, body {
   padding: 0 8px;
 }
 
+.mobile-sidebar-header {
+  display: none;
+}
+
 .chat-list-wrap::-webkit-scrollbar { width: 4px; }
 .chat-list-wrap::-webkit-scrollbar-track { background: transparent; }
 .chat-list-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -1221,6 +1225,13 @@ html, body {
   .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 50; max-width: 85vw; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
   .suggestions-grid { grid-template-columns: 1fr; }
   .welcome-title { font-size: 22px; }
+  
+  .mobile-sidebar-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
   
   /* Fix chat input size on mobile */
   .input-area { padding: 8px 10px 8px; }
