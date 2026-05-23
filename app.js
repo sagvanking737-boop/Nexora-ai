@@ -715,10 +715,10 @@ function updateModelBadge() {
     'google/gemini-2.5-pro-preview':     'Gemini 2.5 Pro',
     'openai/gpt-4o':                     'GPT-4o',
     'meta-llama/llama-3.3-70b-instruct': 'Llama 3.3 70B',
-    'google/gemma-2-9b-it:free':         'Gemma 2 9B (Kostenlos)',
-    'meta-llama/llama-3-8b-instruct:free':'Llama 3 8B (Kostenlos)',
-    'deepseek/deepseek-r1:free':         'DeepSeek R1 (Kostenlos)',
-    'qwen/qwen-2.5-72b-instruct:free':   'Qwen 2.5 72B (Kostenlos)',
+    'google/gemma-4-26b-a4b-it:free':    'Gemma 4 26B (Kostenlos)',
+    'meta-llama/llama-3.3-70b-instruct:free':'Llama 3.3 70B (Kostenlos)',
+    'deepseek/deepseek-v4-flash:free':   'DeepSeek V4 (Kostenlos)',
+    'qwen/qwen3-coder:free':             'Qwen 3 Coder (Kostenlos)',
     'openrouter/free':                   'Nexora Auto',
   };
   els.modelBadge.textContent = names[STATE.settings.model] || STATE.settings.model;
