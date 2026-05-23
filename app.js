@@ -106,6 +106,7 @@ const els = {
   app:               $('app'),
   sidebar:           $('sidebar'),
   toggleSidebar:     $('toggle-sidebar'),
+  sidebarOverlay:    $('sidebar-overlay'),
   newChatBtn:        $('new-chat-btn'),
   chatList:          $('chat-list'),
   chatTitle:         $('chat-title'),
@@ -242,6 +243,7 @@ function showApp() {
   }
   renderChatList();
   els.userInput.focus();
+  closeSidebarOnMobile();
   if (STATE.settings.apiKey) {
     showToast(`Willkommen, ${user.username}! ✓`, 'success');
   }
@@ -353,6 +355,7 @@ function switchToChat(id) {
   const chat = STATE.chats[id];
   els.chatTitle.textContent = chat.title;
   saveToStorage();
+  closeSidebarOnMobile();
 }
 
 function deleteChat(id) {
@@ -766,9 +769,16 @@ function exportChat() {
    EVENT LISTENERS
    ============================================= */
 
+function closeSidebarOnMobile() {
+  if (window.innerWidth <= 768) {
+    els.sidebar.classList.remove('open');
+  }
+}
+
 function attachEvents() {
   // Sidebar
   els.toggleSidebar.addEventListener('click', () => els.sidebar.classList.toggle('open'));
+  if (els.sidebarOverlay) els.sidebarOverlay.addEventListener('click', () => els.sidebar.classList.remove('open'));
   els.newChatBtn.addEventListener('click', startNewChat);
 
   // Send
