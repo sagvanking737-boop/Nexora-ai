@@ -890,16 +890,52 @@ html, body {
 }
 .msg-action-btn:hover { background: var(--bg-hover); border-color: var(--border-bright); color: var(--text-secondary); }
 
-/* Thinking */
+/* Thinking / Soundwave */
 .thinking-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   color: var(--text-muted);
   font-size: 13px;
-  padding: 4px 0;
+  padding: 8px 0;
 }
 
+.soundwave-bars {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+}
+
+.soundwave-bars span {
+  display: inline-block;
+  width: 6px;
+  border-radius: 100px;
+  background: var(--text-primary);
+  animation: voiceWave 1s ease-in-out infinite;
+  transform-origin: center;
+  min-height: 6px;
+}
+
+.soundwave-bars span:nth-child(1)  { height: 10px; animation-delay: 0.0s;  }
+.soundwave-bars span:nth-child(2)  { height: 18px; animation-delay: 0.15s; }
+.soundwave-bars span:nth-child(3)  { height: 28px; animation-delay: 0.05s; }
+.soundwave-bars span:nth-child(4)  { height: 34px; animation-delay: 0.2s;  }
+.soundwave-bars span:nth-child(5)  { height: 26px; animation-delay: 0.1s;  }
+
+@keyframes voiceWave {
+  0%, 100% {
+    transform: scaleY(0.35);
+  }
+  30% {
+    transform: scaleY(1);
+  }
+  60% {
+    transform: scaleY(0.5);
+  }
+}
+
+/* Legacy support for old thinking dots */
 .thinking-dots { display: flex; gap: 4px; }
 .thinking-dots span {
   width: 5px;
@@ -1016,6 +1052,44 @@ html, body {
 }
 
 .token-info { font-size: 11px; color: var(--text-muted); }
+
+.input-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mic-btn {
+  width: 34px;
+  height: 34px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+.mic-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.mic-btn.recording {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+  animation: micPulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+}
+
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.2); }
+  50% { box-shadow: 0 0 18px rgba(239, 68, 68, 0.45); }
+}
 
 .send-btn {
   width: 34px;
@@ -1758,4 +1832,176 @@ html, body {
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(25, 195, 125, 0.25);
 }
+
+/* =============================================
+   VOICE OVERLAY SYSTEM
+   ============================================= */
+
+.voice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, rgba(17, 24, 39, 0.97) 0%, rgba(8, 10, 15, 0.99) 100%);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.4s;
+}
+
+.voice-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.voice-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 82vh;
+  width: 90%;
+  max-width: 580px;
+  text-align: center;
+  color: white;
+  animation: voiceOverlayAppear 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes voiceOverlayAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.voice-overlay-header {
+  margin-top: 10px;
+}
+
+.voice-brand {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: linear-gradient(135deg, var(--accent) 0%, #10b981 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 8px rgba(25, 195, 125, 0.2));
+}
+
+.voice-status {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.5px;
+  transition: color 0.3s;
+}
+
+.voice-transcript {
+  font-family: var(--font-ui);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #f3f4f6;
+  max-width: 100%;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 0 16px;
+  margin-top: 20px;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  scrollbar-width: none;
+}
+.voice-transcript::-webkit-scrollbar {
+  display: none;
+}
+
+.voice-wave-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  margin: 30px 0;
+}
+
+.voice-bars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  height: 160px;
+  width: 100%;
+}
+
+.voice-bar {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border-radius: 100px;
+  background-color: white;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.2);
+  transition: height 0.08s ease-out, background-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.voice-response {
+  font-family: var(--font-ui);
+  font-size: 17px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.7);
+  max-width: 100%;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 0 20px;
+  margin-bottom: 20px;
+  scrollbar-width: none;
+  font-style: italic;
+}
+.voice-response::-webkit-scrollbar {
+  display: none;
+}
+
+.voice-controls {
+  margin-bottom: 20px;
+}
+
+.voice-control-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.voice-control-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.voice-control-btn:active {
+  transform: translateY(0);
+}
+
 
