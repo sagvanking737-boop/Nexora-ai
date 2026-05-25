@@ -75,6 +75,7 @@ const STATE = {
   chats: {},
   activeChatId: null,
   isStreaming: false,
+  voiceModeActive: false,
   settings: {
     apiKey: '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',
     model: 'anthropic/claude-sonnet-4-7',
@@ -157,6 +158,13 @@ const els = {
   themeDarkBtn:      $('theme-dark-btn'),
   themeLightBtn:     $('theme-light-btn'),
   suggestionsGrid:   document.querySelector('.suggestions-grid'),
+  micBtn:            $('mic-btn'),
+  voiceOverlay:      $('voice-overlay'),
+  voiceStatus:       $('voice-status'),
+  voiceTranscript:   $('voice-transcript'),
+  voiceResponse:     $('voice-response'),
+  voiceCloseBtn:     $('voice-close-btn'),
+  voiceBars:         $('voice-bars'),
 };
 
 /* =============================================
@@ -487,7 +495,7 @@ function createStreamingMessage() {
       <div class="message-content-wrap" style="flex:1;min-width:0;">
         <div class="message-content">
           <div class="thinking-indicator">
-            <div class="thinking-dots"><span></span><span></span><span></span></div>
+            <div class="soundwave-bars"><span></span><span></span><span></span><span></span><span></span></div>
             <span>Nexora denkt nach...</span>
           </div>
         </div>
@@ -922,6 +930,14 @@ function attachEvents() {
   // Theme toggle
   els.themeDarkBtn.addEventListener('click', () => setTheme('dark'));
   els.themeLightBtn.addEventListener('click', () => setTheme('light'));
+
+  // Microphone / Voice Input
+  if (els.micBtn) {
+    els.micBtn.addEventListener('click', enterVoiceMode);
+  }
+  if (els.voiceCloseBtn) {
+    els.voiceCloseBtn.addEventListener('click', exitVoiceMode);
+  }
 }
 
 /* =============================================
@@ -930,6 +946,8 @@ function attachEvents() {
 
 let isFeedbackActive = false;
 let currentMode = 'general';
+let speechRecognition = null;
+let isRecording = false;
 
 /* =============================================
    INIT
@@ -1271,6 +1289,596 @@ async function simulateReply(userTarget) {
   } catch (e) {
     console.warn('Simulation failed offline:', e);
   }
+}
+
+/* =============================================
+   VOICE INPUT (Speech-to-Text)
+   ============================================= */
+
+function toggleVoiceInput() {
+  if (isRecording) {
+    stopVoiceInput();
+    return;
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('Spracherkennung wird von deinem Browser nicht unterstützt. Nutze Chrome oder Edge.', 'error');
+    return;
+  }
+
+  speechRecognition = new SpeechRecognition();
+  speechRecognition.lang = 'de-DE';
+  speechRecognition.interimResults = true;
+  speechRecognition.continuous = true;
+  speechRecognition.maxAlternatives = 1;
+
+  let finalTranscript = els.userInput.value;
+
+  speechRecognition.onstart = () => {
+    isRecording = true;
+    els.micBtn.classList.add('recording');
+    els.micBtn.title = 'Aufnahme stoppen';
+    showToast('🎙️ Spracherkennung aktiv – sprich jetzt...', 'success');
+  };
+
+  speechRecognition.onresult = (event) => {
+    let interimTranscript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalTranscript += (finalTranscript ? ' ' : '') + transcript;
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+    els.userInput.value = finalTranscript + (interimTranscript ? ' ' + interimTranscript : '');
+    autoResizeTextarea();
+    updateCharCounter();
+  };
+
+  speechRecognition.onerror = (event) => {
+    console.error('Speech recognition error:', event.error);
+    if (event.error === 'not-allowed') {
+      showToast('Mikrofonzugriff verweigert. Bitte erlaube den Zugriff in deinen Browsereinstellungen.', 'error');
+    } else if (event.error === 'no-speech') {
+      showToast('Keine Sprache erkannt. Versuche es erneut.', '');
+    } else {
+      showToast('Spracherkennungsfehler: ' + event.error, 'error');
+    }
+    stopVoiceInput();
+  };
+
+  speechRecognition.onend = () => {
+    stopVoiceInput();
+  };
+
+  try {
+    speechRecognition.start();
+  } catch (e) {
+    console.error('Failed to start speech recognition:', e);
+    showToast('Fehler beim Starten der Spracherkennung.', 'error');
+  }
+}
+
+function stopVoiceInput() {
+  isRecording = false;
+  if (els.micBtn) {
+    els.micBtn.classList.remove('recording');
+    els.micBtn.title = 'Spracheingabe (Mikrofon)';
+  }
+  if (speechRecognition) {
+    try { speechRecognition.stop(); } catch {}
+    speechRecognition = null;
+  }
+}
+
+/* =============================================
+   FULL SCREEN VOICE MODE
+   ============================================= */
+
+let voiceModeRecognition = null;
+let isVoiceRecording = false;
+let microphoneStream = null;
+let audioContext = null;
+let analyser = null;
+let dataArray = null;
+let voiceAnimationFrame = null;
+let thinkingPulseInterval = null;
+let aiVoiceInterval = null;
+
+let spokenIndex = 0;
+let sentenceQueue = [];
+let voiceTextBuffer = '';
+
+function enterVoiceMode() {
+  if (STATE.isStreaming) {
+    showToast('Bitte warte, bis die KI fertig geantwortet hat.', 'error');
+    return;
+  }
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('Spracherkennung wird von deinem Browser nicht unterstützt. Nutze Chrome oder Edge.', 'error');
+    return;
+  }
+
+  STATE.voiceModeActive = true;
+  
+  // Hide scrollbar on body
+  document.body.style.overflow = 'hidden';
+  
+  els.voiceOverlay.classList.remove('hidden');
+  els.voiceStatus.textContent = 'Bereit...';
+  els.voiceTranscript.textContent = 'Sprich jetzt...';
+  els.voiceResponse.textContent = '';
+  
+  startVoiceRecognitionInVoiceMode();
+}
+
+function exitVoiceMode() {
+  STATE.voiceModeActive = false;
+  document.body.style.overflow = '';
+  
+  if (voiceModeRecognition) {
+    try { voiceModeRecognition.stop(); } catch {}
+    voiceModeRecognition = null;
+  }
+  
+  isVoiceRecording = false;
+  
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  
+  stopMicrophoneVisualizer();
+  stopThinkingPulseAnimation();
+  stopAIVoiceAnimation();
+  
+  els.voiceOverlay.classList.add('hidden');
+  
+  setInputEnabled(true);
+}
+
+async function startVoiceRecognitionInVoiceMode() {
+  if (!STATE.voiceModeActive) return;
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  voiceModeRecognition = new SpeechRecognition();
+  voiceModeRecognition.lang = 'de-DE';
+  voiceModeRecognition.interimResults = true;
+  voiceModeRecognition.continuous = false;
+  
+  let finalTranscript = '';
+  
+  voiceModeRecognition.onstart = () => {
+    isVoiceRecording = true;
+    els.voiceStatus.textContent = 'Nexora hört zu...';
+    els.voiceStatus.style.color = '#10b981';
+    els.voiceTranscript.textContent = 'Höre zu...';
+    
+    startMicrophoneVisualizer();
+  };
+  
+  voiceModeRecognition.onresult = (event) => {
+    let interimTranscript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript;
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+    els.voiceTranscript.textContent = finalTranscript || interimTranscript || 'Höre zu...';
+  };
+  
+  voiceModeRecognition.onerror = (event) => {
+    console.error('Voice recognition error:', event.error);
+    if (event.error === 'not-allowed') {
+      showToast('Mikrofonzugriff verweigert.', 'error');
+      exitVoiceMode();
+    } else {
+      restartListeningWithDelay();
+    }
+  };
+  
+  voiceModeRecognition.onend = () => {
+    isVoiceRecording = false;
+    stopMicrophoneVisualizer();
+    
+    const text = finalTranscript.trim();
+    if (text.length > 0) {
+      submitVoiceMessage(text);
+    } else {
+      if (STATE.voiceModeActive && !window.speechSynthesis.speaking && !STATE.isStreaming) {
+        restartListeningWithDelay();
+      }
+    }
+  };
+  
+  try {
+    voiceModeRecognition.start();
+  } catch (e) {
+    console.error('Failed to start speech recognition:', e);
+  }
+}
+
+function restartListeningWithDelay() {
+  if (!STATE.voiceModeActive || window.speechSynthesis.speaking || STATE.isStreaming) return;
+  els.voiceStatus.textContent = 'Warte auf Sprache...';
+  els.voiceStatus.style.color = 'rgba(255, 255, 255, 0.45)';
+  setTimeout(() => {
+    if (STATE.voiceModeActive && !window.speechSynthesis.speaking && !STATE.isStreaming && !isVoiceRecording) {
+      startVoiceRecognitionInVoiceMode();
+    }
+  }, 1000);
+}
+
+async function submitVoiceMessage(text) {
+  if (STATE.isStreaming) return;
+  
+  if (!STATE.settings.apiKey) {
+    showToast('Bitte gib deinen Nexora API Key in den Einstellungen ein.', 'error');
+    exitVoiceMode();
+    openSettingsModal();
+    return;
+  }
+  
+  STATE.isStreaming = true;
+  els.voiceStatus.textContent = 'Nexora denkt nach...';
+  els.voiceStatus.style.color = '#10b981';
+  els.voiceResponse.textContent = '';
+  
+  startThinkingPulseAnimation();
+  
+  const chat = STATE.chats[STATE.activeChatId];
+  if (chat) {
+    if (chat.messages.length === 0) updateChatTitle(STATE.activeChatId, text);
+    chat.messages.push({ role: 'user', content: text });
+    appendMessageToDOM('user', text);
+    saveToStorage();
+  }
+  
+  let fullResponse = '';
+  const streamEl = createStreamingMessage();
+  
+  resetVoiceSpeech();
+  
+  try {
+    const messages = [];
+    if (STATE.settings.systemPrompt.trim()) {
+      messages.push({ role: 'system', content: STATE.settings.systemPrompt.trim() });
+    }
+    if (chat) {
+      chat.messages.forEach(m => messages.push({ role: m.role, content: m.content }));
+    }
+    
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${STATE.settings.apiKey}`,
+        'HTTP-Referer': 'https://nexora-ai-app',
+        'X-Title': 'Nexora AI App',
+      },
+      body: JSON.stringify({
+        model: STATE.settings.model,
+        max_tokens: STATE.settings.maxTokens,
+        temperature: STATE.settings.temperature,
+        stream: true,
+        messages,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData?.error?.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    
+    stopThinkingPulseAnimation();
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+        const jsonStr = trimmed.slice(6);
+        if (jsonStr === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(jsonStr);
+          const delta = evt.choices?.[0]?.delta?.content;
+          if (delta) {
+            fullResponse += delta;
+            updateStreamingMessage(streamEl, fullResponse);
+            processIncomingStreamForVoice(fullResponse);
+          }
+        } catch {}
+      }
+    }
+    
+    finalizeStreamingMessage(streamEl, fullResponse);
+    if (chat) {
+      chat.messages.push({ role: 'assistant', content: fullResponse });
+      saveToStorage();
+    }
+    
+    finalizeVoiceSpeech(fullResponse);
+    
+  } catch (err) {
+    console.error('Voice stream error:', err);
+    showToast('Fehler: ' + err.message, 'error');
+    exitVoiceMode();
+  } finally {
+    STATE.isStreaming = false;
+    setInputEnabled(true);
+  }
+}
+
+function resetVoiceSpeech() {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  spokenIndex = 0;
+  sentenceQueue = [];
+  voiceTextBuffer = '';
+}
+
+function processIncomingStreamForVoice(text) {
+  if (!STATE.voiceModeActive) return;
+  
+  els.voiceResponse.textContent = text;
+  
+  const rawNew = text.slice(voiceTextBuffer.length);
+  voiceTextBuffer = text;
+  
+  let lastIndex = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '.' || char === '?' || char === '!' || char === '\n') {
+      const sentence = text.slice(lastIndex, i + 1).trim();
+      if (sentence.length > 3) {
+        if (!sentenceQueue.includes(sentence)) {
+          sentenceQueue.push(sentence);
+          playNextSentence();
+        }
+      }
+      lastIndex = i + 1;
+    }
+  }
+}
+
+function playNextSentence() {
+  if (!STATE.voiceModeActive) return;
+  if (!('speechSynthesis' in window)) return;
+  if (window.speechSynthesis.speaking) return;
+  if (spokenIndex >= sentenceQueue.length) return;
+  
+  const sentence = sentenceQueue[spokenIndex];
+  spokenIndex++;
+  
+  const utterance = new SpeechSynthesisUtterance(sentence);
+  utterance.lang = 'de-DE';
+  
+  const voices = window.speechSynthesis.getVoices();
+  const deVoice = voices.find(v => v.lang.startsWith('de') && v.name.includes('Google')) ||
+                  voices.find(v => v.lang.startsWith('de')) ||
+                  voices[0];
+  if (deVoice) utterance.voice = deVoice;
+  
+  utterance.onstart = () => {
+    els.voiceStatus.textContent = 'Nexora spricht...';
+    els.voiceStatus.style.color = '#10b981';
+    startAIVoiceAnimation();
+  };
+  
+  utterance.onend = () => {
+    stopAIVoiceAnimation();
+    if (spokenIndex < sentenceQueue.length) {
+      playNextSentence();
+    } else {
+      if (!STATE.isStreaming) {
+        els.voiceStatus.textContent = 'Bereit...';
+        els.voiceStatus.style.color = 'rgba(255, 255, 255, 0.45)';
+        setTimeout(() => {
+          if (STATE.voiceModeActive && !window.speechSynthesis.speaking && !isVoiceRecording) {
+            startVoiceRecognitionInVoiceMode();
+          }
+        }, 500);
+      }
+    }
+  };
+  
+  utterance.onerror = () => {
+    stopAIVoiceAnimation();
+    if (spokenIndex < sentenceQueue.length) {
+      playNextSentence();
+    }
+  };
+  
+  window.speechSynthesis.speak(utterance);
+}
+
+function finalizeVoiceSpeech(fullText) {
+  if (!STATE.voiceModeActive) return;
+  
+  const lastPart = fullText.slice(sentenceQueue.join(' ').length).trim();
+  if (lastPart.length > 0 && !sentenceQueue.includes(lastPart)) {
+    sentenceQueue.push(lastPart);
+  }
+  
+  playNextSentence();
+  
+  if (sentenceQueue.length === 0 || spokenIndex >= sentenceQueue.length) {
+    els.voiceStatus.textContent = 'Bereit...';
+    els.voiceStatus.style.color = 'rgba(255, 255, 255, 0.45)';
+    setTimeout(() => {
+      if (STATE.voiceModeActive && !window.speechSynthesis.speaking && !isVoiceRecording) {
+        startVoiceRecognitionInVoiceMode();
+      }
+    }, 500);
+  }
+}
+
+async function startMicrophoneVisualizer() {
+  stopMicrophoneVisualizer();
+  
+  const bars = document.querySelectorAll('.voice-bar');
+  bars.forEach(bar => {
+    bar.style.backgroundColor = 'white';
+    bar.style.boxShadow = '0 0 24px rgba(255, 255, 255, 0.2)';
+  });
+  
+  try {
+    microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    source = audioContext.createMediaStreamSource(microphoneStream);
+    source.connect(analyser);
+    analyser.fftSize = 32;
+    const bufferLength = analyser.frequencyBinCount;
+    dataArray = new Uint8Array(bufferLength);
+    
+    function draw() {
+      if (!isVoiceRecording || !STATE.voiceModeActive) {
+        stopMicrophoneVisualizer();
+        return;
+      }
+      
+      analyser.getByteFrequencyData(dataArray);
+      
+      const indices = [1, 3, 5, 4, 2];
+      for (let i = 0; i < 5; i++) {
+        const val = dataArray[indices[i]] || 0;
+        const pct = val / 160;
+        const height = 24 + (pct * 120);
+        if (bars[i]) {
+          bars[i].style.height = `${Math.max(24, Math.min(140, height))}px`;
+        }
+      }
+      
+      voiceAnimationFrame = requestAnimationFrame(draw);
+    }
+    
+    draw();
+  } catch (err) {
+    console.warn('Microphone visualizer error, using simulation:', err);
+    let t = 0;
+    function simulate() {
+      if (!isVoiceRecording || !STATE.voiceModeActive) return;
+      bars.forEach((bar, i) => {
+        const amp = 24 + Math.sin(t + i) * 15 + Math.random() * 25;
+        bar.style.height = `${Math.max(24, Math.min(80, amp))}px`;
+      });
+      t += 0.3;
+      voiceAnimationFrame = requestAnimationFrame(simulate);
+    }
+    simulate();
+  }
+}
+
+function stopMicrophoneVisualizer() {
+  if (voiceAnimationFrame) {
+    cancelAnimationFrame(voiceAnimationFrame);
+    voiceAnimationFrame = null;
+  }
+  if (microphoneStream) {
+    microphoneStream.getTracks().forEach(track => track.stop());
+    microphoneStream = null;
+  }
+  if (audioContext) {
+    try { audioContext.close(); } catch {}
+    audioContext = null;
+  }
+  const bars = document.querySelectorAll('.voice-bar');
+  bars.forEach(bar => {
+    bar.style.height = '24px';
+  });
+}
+
+function startThinkingPulseAnimation() {
+  stopThinkingPulseAnimation();
+  const bars = document.querySelectorAll('.voice-bar');
+  
+  bars.forEach(bar => {
+    bar.style.backgroundColor = '#10b981';
+    bar.style.boxShadow = '0 0 24px rgba(16, 185, 129, 0.4)';
+  });
+  
+  let t = 0;
+  function pulse() {
+    bars.forEach((bar, i) => {
+      const scale = 24 + Math.sin(t + i * 0.8) * 30;
+      bar.style.height = `${scale}px`;
+    });
+    t += 0.15;
+    thinkingPulseInterval = requestAnimationFrame(pulse);
+  }
+  
+  pulse();
+}
+
+function stopThinkingPulseAnimation() {
+  if (thinkingPulseInterval) {
+    cancelAnimationFrame(thinkingPulseInterval);
+    thinkingPulseInterval = null;
+  }
+  const bars = document.querySelectorAll('.voice-bar');
+  bars.forEach(bar => {
+    bar.style.height = '24px';
+    bar.style.backgroundColor = 'white';
+    bar.style.boxShadow = '0 0 24px rgba(255, 255, 255, 0.2)';
+  });
+}
+
+function startAIVoiceAnimation() {
+  stopAIVoiceAnimation();
+  const bars = document.querySelectorAll('.voice-bar');
+  
+  bars.forEach(bar => {
+    bar.style.backgroundColor = '#10b981';
+    bar.style.boxShadow = '0 0 24px rgba(16, 185, 129, 0.4)';
+  });
+  
+  let t = 0;
+  function animate() {
+    if (!window.speechSynthesis.speaking) {
+      stopAIVoiceAnimation();
+      return;
+    }
+    
+    bars.forEach((bar, i) => {
+      const phase = i * 1.5;
+      const amp = 30 + Math.sin(t + phase) * 50 + Math.random() * 40;
+      bar.style.height = `${Math.max(24, Math.min(140, amp))}px`;
+    });
+    
+    t += 0.2;
+    aiVoiceInterval = requestAnimationFrame(animate);
+  }
+  
+  animate();
+}
+
+function stopAIVoiceAnimation() {
+  if (aiVoiceInterval) {
+    cancelAnimationFrame(aiVoiceInterval);
+    aiVoiceInterval = null;
+  }
+  const bars = document.querySelectorAll('.voice-bar');
+  bars.forEach(bar => {
+    bar.style.height = '24px';
+    bar.style.backgroundColor = 'white';
+    bar.style.boxShadow = '0 0 24px rgba(255, 255, 255, 0.2)';
+  });
 }
 
 // Start application
