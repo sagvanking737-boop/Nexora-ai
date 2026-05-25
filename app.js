@@ -1740,10 +1740,17 @@ async function startMicrophoneVisualizer() {
   try {
     microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Auto-resume AudioContext if suspended (browser security policy)
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+    
     analyser = audioContext.createAnalyser();
     source = audioContext.createMediaStreamSource(microphoneStream);
     source.connect(analyser);
-    analyser.fftSize = 32;
+    
+    analyser.fftSize = 256; // larger buffer for stable time-domain signal
     const bufferLength = analyser.frequencyBinCount;
     dataArray = new Uint8Array(bufferLength);
     
@@ -1753,15 +1760,23 @@ async function startMicrophoneVisualizer() {
         return;
       }
       
-      analyser.getByteFrequencyData(dataArray);
+      analyser.getByteTimeDomainData(dataArray);
       
-      const indices = [1, 3, 5, 4, 2];
+      // Calculate Root-Mean-Square (RMS) loudness volume
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const val = (dataArray[i] - 128) / 128; // Normalize to -1..1 range
+        sum += val * val;
+      }
+      const rms = Math.sqrt(sum / bufferLength);
+      
+      // Map loudness to bar heights with different multipliers for organic wave look
+      const multipliers = [0.6, 1.1, 1.5, 1.2, 0.7];
       for (let i = 0; i < 5; i++) {
-        const val = dataArray[indices[i]] || 0;
-        const pct = val / 160;
-        const height = 24 + (pct * 120);
+        const vol = rms * multipliers[i] * 6.5; // Amplification factor
+        const height = 24 + Math.min(116, vol * 116);
         if (bars[i]) {
-          bars[i].style.height = `${Math.max(24, Math.min(140, height))}px`;
+          bars[i].style.height = `${height}px`;
         }
       }
       
