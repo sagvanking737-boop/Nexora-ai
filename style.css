@@ -1312,6 +1312,8 @@ html, body {
   .input-wrapper { border-radius: var(--radius-md); }
   .input-toolbar-left, .input-toolbar-right { display: none; } /* Hide toolbar on mobile to save space */
   .user-input { padding: 10px 14px; font-size: 14px; }
+  .token-info { display: none !important; } /* Hide token info on mobile to ensure buttons fit perfectly */
+  .input-bottom { justify-content: flex-end !important; padding: 6px 8px 8px !important; }
   
   /* Sidebar Overlay on mobile */
   .sidebar-overlay {
