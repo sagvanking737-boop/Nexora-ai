@@ -210,6 +210,10 @@ const els = {
   voiceTranscript:   $('voice-transcript'),
   voiceResponse:     $('voice-response'),
   voiceCloseBtn:     $('voice-close-btn'),
+  voiceMuteBtn:      $('voice-mute-btn'),
+  iconVoiceUnmuted:  $('icon-voice-unmuted'),
+  iconVoiceMuted:    $('icon-voice-muted'),
+  voiceMuteText:     $('voice-mute-text'),
   voiceBars:         $('voice-bars'),
 };
 
@@ -1073,6 +1077,19 @@ function attachEvents() {
   if (els.voiceCloseBtn) {
     els.voiceCloseBtn.addEventListener('click', exitVoiceMode);
   }
+  
+  if (els.voiceMuteBtn) {
+    if (STATE.settings.voiceMuted === undefined) STATE.settings.voiceMuted = false;
+    updateVoiceMuteUI();
+    els.voiceMuteBtn.addEventListener('click', () => {
+      STATE.settings.voiceMuted = !STATE.settings.voiceMuted;
+      saveToStorage();
+      updateVoiceMuteUI();
+      if (STATE.settings.voiceMuted && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    });
+  }
 }
 
 /* =============================================
@@ -1528,6 +1545,20 @@ let aiVoiceInterval = null;
 let spokenIndex = 0;
 let sentenceQueue = [];
 let voiceTextBuffer = '';
+function updateVoiceMuteUI() {
+  if (!els.voiceMuteBtn) return;
+  if (STATE.settings.voiceMuted) {
+    els.iconVoiceUnmuted.classList.add('hidden');
+    els.iconVoiceMuted.classList.remove('hidden');
+    els.voiceMuteText.textContent = 'Stumm';
+    els.voiceMuteBtn.classList.add('muted');
+  } else {
+    els.iconVoiceUnmuted.classList.remove('hidden');
+    els.iconVoiceMuted.classList.add('hidden');
+    els.voiceMuteText.textContent = 'Laut';
+    els.voiceMuteBtn.classList.remove('muted');
+  }
+}
 
 function enterVoiceMode() {
   if (STATE.isStreaming) {
@@ -1842,6 +1873,7 @@ function playNextSentence() {
   const lang = STATE.settings.voiceLanguage || 'de-DE';
   utterance.lang = lang;
   utterance.rate = 1.15;
+  if (STATE.settings.voiceMuted) utterance.volume = 0;
   
   const voices = window.speechSynthesis.getVoices();
   const prefVoiceName = STATE.settings.voiceVoice;
