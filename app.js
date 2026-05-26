@@ -1481,6 +1481,8 @@ function stopVoiceInput() {
 
 let voiceModeRecognition = null;
 let isVoiceRecording = false;
+let voiceAbortController = null;
+let voiceSilenceTimer = null;
 let microphoneStream = null;
 let audioContext = null;
 let analyser = null;
@@ -1505,6 +1507,13 @@ function enterVoiceMode() {
     return;
   }
 
+  // Audio Unlock for Mobile/Chrome
+  if ('speechSynthesis' in window) {
+    const silent = new SpeechSynthesisUtterance('');
+    silent.volume = 0;
+    window.speechSynthesis.speak(silent);
+  }
+
   STATE.voiceModeActive = true;
   
   // Hide scrollbar on body
@@ -1515,6 +1524,20 @@ function enterVoiceMode() {
   els.voiceTranscript.textContent = 'Sprich jetzt...';
   els.voiceResponse.textContent = '';
   
+  els.voiceOverlay.onclick = (e) => {
+    if (e.target.closest('.close-voice-btn')) return; // let the close button work
+    if (STATE.isStreaming || (window.speechSynthesis && window.speechSynthesis.speaking)) {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      if (voiceAbortController) voiceAbortController.abort();
+      STATE.isStreaming = false;
+      resetVoiceSpeech();
+      els.voiceStatus.textContent = 'Unterbrochen. Höre zu...';
+      els.voiceStatus.style.color = '#10b981';
+      els.voiceResponse.textContent = '';
+      if (!isVoiceRecording) startVoiceRecognitionInVoiceMode();
+    }
+  };
+
   startVoiceRecognitionInVoiceMode();
 }
 
@@ -1549,7 +1572,7 @@ async function startVoiceRecognitionInVoiceMode() {
   voiceModeRecognition = new SpeechRecognition();
   voiceModeRecognition.lang = STATE.settings.voiceLanguage || 'de-DE';
   voiceModeRecognition.interimResults = true;
-  voiceModeRecognition.continuous = false;
+  voiceModeRecognition.continuous = true;
   
   let finalTranscript = '';
   
@@ -1567,12 +1590,20 @@ async function startVoiceRecognitionInVoiceMode() {
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const transcript = event.results[i][0].transcript;
       if (event.results[i].isFinal) {
-        finalTranscript += transcript;
+        finalTranscript += transcript + ' ';
       } else {
         interimTranscript += transcript;
       }
     }
-    els.voiceTranscript.textContent = finalTranscript || interimTranscript || 'Höre zu...';
+    els.voiceTranscript.textContent = finalTranscript + interimTranscript || 'Höre zu...';
+    
+    clearTimeout(voiceSilenceTimer);
+    voiceSilenceTimer = setTimeout(() => {
+      const text = (finalTranscript + interimTranscript).trim();
+      if (text.length > 0) {
+        try { voiceModeRecognition.stop(); } catch {}
+      }
+    }, 1500);
   };
   
   voiceModeRecognition.onerror = (event) => {
@@ -1646,6 +1677,7 @@ async function submitVoiceMessage(text) {
   const streamEl = createStreamingMessage();
   
   resetVoiceSpeech();
+  voiceAbortController = new AbortController();
   
   try {
     const messages = [];
@@ -1664,6 +1696,7 @@ async function submitVoiceMessage(text) {
         'HTTP-Referer': 'https://nexora-ai-app',
         'X-Title': 'Nexora AI App',
       },
+      signal: voiceAbortController.signal,
       body: JSON.stringify({
         model: STATE.settings.model,
         max_tokens: STATE.settings.maxTokens,
@@ -1716,9 +1749,13 @@ async function submitVoiceMessage(text) {
     finalizeVoiceSpeech(fullResponse);
     
   } catch (err) {
-    console.error('Voice stream error:', err);
-    showToast('Fehler: ' + err.message, 'error');
-    exitVoiceMode();
+    if (err.name === 'AbortError') {
+      console.log('Voice fetch aborted by user.');
+    } else {
+      console.error('Voice stream error:', err);
+      showToast('Fehler: ' + err.message, 'error');
+      exitVoiceMode();
+    }
   } finally {
     STATE.isStreaming = false;
     setInputEnabled(true);
@@ -1745,7 +1782,7 @@ function processIncomingStreamForVoice(text) {
   let lastIndex = 0;
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    if (char === '.' || char === '?' || char === '!' || char === '\n') {
+    if (['.', '?', '!', '\n', ',', ':'].includes(char)) {
       const sentence = text.slice(lastIndex, i + 1).trim();
       if (sentence.length > 3) {
         if (!sentenceQueue.includes(sentence)) {
