@@ -6,59 +6,100 @@
 
 const AUTH = {
   currentUser: null,   // { username, isGuest }
+  sessionToken: null,
 
-  // Simple hash (good enough for local storage)
-  hash(str) {
-    let h = 0;
-    for (let i = 0; i < str.length; i++) {
-      h = Math.imul(31, h) + str.charCodeAt(i) | 0;
-    }
-    return h.toString(36);
-  },
-
-  getUsers() {
-    try { return JSON.parse(localStorage.getItem('_users') || '{}'); } catch { return {}; }
-  },
-
-  saveUsers(users) {
-    localStorage.setItem('_users', JSON.stringify(users));
-  },
-
-  register(username, password) {
+  // Register via API (server-side SQLite)
+  async register(username, password) {
     username = username.trim();
     if (!username || username.length < 2) return { ok: false, msg: 'Benutzername muss mindestens 2 Zeichen haben.' };
     if (!password || password.length < 4)  return { ok: false, msg: 'Passwort muss mindestens 4 Zeichen haben.' };
-    const users = this.getUsers();
-    if (users[username]) return { ok: false, msg: 'Benutzername bereits vergeben.' };
-    users[username] = { pw: this.hash(password), createdAt: Date.now() };
-    this.saveUsers(users);
-    return { ok: true };
-  },
-
-  login(username, password) {
-    username = username.trim();
-    const users = this.getUsers();
-    if (!users[username]) return { ok: false, msg: 'Benutzername nicht gefunden.' };
-    if (users[username].pw !== this.hash(password)) return { ok: false, msg: 'Falsches Passwort.' };
-    return { ok: true };
-  },
-
-  setCurrentUser(username, isGuest = false) {
-    this.currentUser = { username, isGuest };
-    sessionStorage.setItem('_session', JSON.stringify({ username, isGuest }));
-  },
-
-  loadSession() {
     try {
-      const s = sessionStorage.getItem('_session');
-      if (s) { this.currentUser = JSON.parse(s); return true; }
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, msg: data.error || 'Registrierung fehlgeschlagen.' };
+      return { ok: true, token: data.token, username: data.username };
+    } catch (e) {
+      console.error('Register error:', e);
+      return { ok: false, msg: 'Server nicht erreichbar. Versuche es später erneut.' };
+    }
+  },
+
+  // Login via API (server-side SQLite)
+  async login(username, password) {
+    username = username.trim();
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, msg: data.error || 'Login fehlgeschlagen.' };
+      return { ok: true, token: data.token, username: data.username };
+    } catch (e) {
+      console.error('Login error:', e);
+      return { ok: false, msg: 'Server nicht erreichbar. Versuche es später erneut.' };
+    }
+  },
+
+  setCurrentUser(username, isGuest = false, token = null) {
+    this.currentUser = { username, isGuest };
+    this.sessionToken = token;
+    // localStorage statt sessionStorage → User bleibt angemeldet!
+    localStorage.setItem('_session', JSON.stringify({ username, isGuest, token }));
+  },
+
+  async loadSession() {
+    try {
+      const s = localStorage.getItem('_session');
+      if (!s) return false;
+      const parsed = JSON.parse(s);
+      // Guest sessions laden direkt
+      if (parsed.isGuest) {
+        this.currentUser = { username: parsed.username, isGuest: true };
+        return true;
+      }
+      // Registrierte User: Token beim Server prüfen
+      if (parsed.token) {
+        try {
+          const res = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${parsed.token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            this.currentUser = { username: data.username, isGuest: false };
+            this.sessionToken = parsed.token;
+            return true;
+          }
+        } catch (e) {
+          console.warn('Session validation failed, using cached data:', e);
+        }
+        // Fallback: Wenn Server offline ist, nutze gecachte Daten
+        this.currentUser = { username: parsed.username, isGuest: false };
+        this.sessionToken = parsed.token;
+        return true;
+      }
     } catch {}
     return false;
   },
 
-  logout() {
+  async logout() {
+    // Server-seitiges Logout
+    if (this.sessionToken) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${this.sessionToken}` },
+        });
+      } catch {}
+    }
     this.currentUser = null;
-    sessionStorage.removeItem('_session');
+    this.sessionToken = null;
+    localStorage.removeItem('_session');
   },
 
   storageKey(suffix) {
@@ -181,10 +222,11 @@ window.showTab = function(tab) {
     : 'Erstelle ein Konto, um deine Gespräche zu speichern.';
 };
 
-window.doLogin = function() {
+window.doLogin = async function() {
   const username = $('login-username').value.trim();
   const password = $('login-password').value;
   const errEl = $('login-error');
+  const btn = $('login-btn');
   errEl.classList.add('hidden');
 
   if (!username || !password) {
@@ -193,22 +235,30 @@ window.doLogin = function() {
     return;
   }
 
-  const result = AUTH.login(username, password);
+  btn.disabled = true;
+  btn.textContent = 'Anmelden...';
+
+  const result = await AUTH.login(username, password);
   if (!result.ok) {
     errEl.textContent = result.msg;
     errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Anmelden';
     return;
   }
 
-  AUTH.setCurrentUser(username);
+  AUTH.setCurrentUser(result.username, false, result.token);
+  btn.disabled = false;
+  btn.textContent = 'Anmelden';
   showApp();
 };
 
-window.doRegister = function() {
+window.doRegister = async function() {
   const username = $('reg-username').value.trim();
   const password = $('reg-password').value;
   const password2 = $('reg-password2').value;
   const errEl = $('reg-error');
+  const btn = $('register-btn');
   errEl.classList.add('hidden');
 
   if (password !== password2) {
@@ -217,15 +267,22 @@ window.doRegister = function() {
     return;
   }
 
-  const result = AUTH.register(username, password);
+  btn.disabled = true;
+  btn.textContent = 'Erstelle Konto...';
+
+  const result = await AUTH.register(username, password);
   if (!result.ok) {
     errEl.textContent = result.msg;
     errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Konto erstellen';
     return;
   }
 
   // Auto-login after register
-  AUTH.setCurrentUser(username);
+  AUTH.setCurrentUser(result.username, false, result.token);
+  btn.disabled = false;
+  btn.textContent = 'Konto erstellen';
   showApp();
   showToast('Konto erstellt ✓', 'success');
 };
@@ -865,8 +922,8 @@ function attachEvents() {
   });
 
   // Logout
-  els.logoutBtn.addEventListener('click', () => {
-    AUTH.logout();
+  els.logoutBtn.addEventListener('click', async () => {
+    await AUTH.logout();
     STATE.chats = {};
     STATE.activeChatId = null;
     els.app.classList.add('hidden');
@@ -953,13 +1010,14 @@ let isRecording = false;
    INIT
    ============================================= */
 
-function init() {
+async function init() {
   attachEvents();
   initTheme();
   initMode();
 
-  // Try to restore session (e.g. after page refresh)
-  if (AUTH.loadSession()) {
+  // Try to restore session (e.g. after page refresh or browser close)
+  const hasSession = await AUTH.loadSession();
+  if (hasSession) {
     showApp();
   }
   // Otherwise auth screen is shown by default (visible in HTML)
@@ -1771,8 +1829,8 @@ async function startMicrophoneVisualizer() {
       const rms = Math.sqrt(sum / bufferLength);
       
       // Map loudness to bar heights with different multipliers for organic wave look
-      const multipliers = [0.6, 1.1, 1.5, 1.2, 0.7];
-      for (let i = 0; i < 5; i++) {
+      const multipliers = [0.7, 1.4, 1.4, 0.7];
+      for (let i = 0; i < 4; i++) {
         const vol = rms * multipliers[i] * 6.5; // Amplification factor
         const height = 24 + Math.min(116, vol * 116);
         if (bars[i]) {
