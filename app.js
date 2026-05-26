@@ -180,6 +180,7 @@ const els = {
   tempValue:         $('temp-value'),
   voiceLangSelect:   $('voice-lang-select'),
   voiceNameSelect:   $('voice-name-select'),
+  testVoiceBtn:      $('test-voice-btn'),
   systemPromptModal: $('system-prompt-modal'),
   systemPromptBtn:   $('system-prompt-btn'),
   closeSystemPrompt: $('close-system-prompt'),
@@ -764,6 +765,39 @@ function openSettingsModal() {
 }
 
 function closeSettingsModal() { els.settingsModal.classList.add('hidden'); }
+
+function cleanTextForSpeech(text) {
+  return text.replace(/[#*_~`]/g, '')
+             .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+             .trim();
+}
+
+if (els.testVoiceBtn) {
+  els.testVoiceBtn.addEventListener('click', () => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const lang = els.voiceLangSelect ? els.voiceLangSelect.value : 'de-DE';
+    const text = lang.startsWith('de') ? 'Hallo, so klinge ich!' : 'Hello, this is how I sound!';
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    utterance.rate = 1.15;
+    
+    const voices = window.speechSynthesis.getVoices();
+    const prefVoiceName = els.voiceNameSelect ? els.voiceNameSelect.value : 'auto';
+    let selectedVoice = null;
+    if (prefVoiceName && prefVoiceName !== 'auto') {
+      selectedVoice = voices.find(v => v.name === prefVoiceName);
+    }
+    if (!selectedVoice) {
+      const langPrefix = lang.split('-')[0];
+      selectedVoice = voices.find(v => v.lang.startsWith(langPrefix) && v.name.includes('Google')) ||
+                      voices.find(v => v.lang.startsWith(langPrefix)) ||
+                      voices[0];
+    }
+    if (selectedVoice) utterance.voice = selectedVoice;
+    window.speechSynthesis.speak(utterance);
+  });
+}
 
 function populateVoiceOptions() {
   if (!('speechSynthesis' in window) || !els.voiceNameSelect || !els.voiceLangSelect) return;
@@ -1804,9 +1838,10 @@ function playNextSentence() {
   const sentence = sentenceQueue[spokenIndex];
   spokenIndex++;
   
-  const utterance = new SpeechSynthesisUtterance(sentence);
+  const utterance = new SpeechSynthesisUtterance(cleanTextForSpeech(sentence));
   const lang = STATE.settings.voiceLanguage || 'de-DE';
   utterance.lang = lang;
+  utterance.rate = 1.15;
   
   const voices = window.speechSynthesis.getVoices();
   const prefVoiceName = STATE.settings.voiceVoice;
