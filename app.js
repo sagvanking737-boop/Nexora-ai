@@ -1668,7 +1668,7 @@ async function startVoiceRecognitionInVoiceMode() {
       if (text.length > 0) {
         try { voiceModeRecognition.stop(); } catch {}
       }
-    }, 1500);
+    }, 800);
   };
   
   voiceModeRecognition.onerror = (event) => {
@@ -1746,8 +1746,12 @@ async function submitVoiceMessage(text) {
   
   try {
     const messages = [];
-    if (STATE.settings.systemPrompt.trim()) {
-      messages.push({ role: 'system', content: STATE.settings.systemPrompt.trim() });
+    let sysPrompt = STATE.settings.systemPrompt.trim();
+    if (sysPrompt) {
+      sysPrompt += "\n\nWICHTIG: Da wir uns im Voice-Modus befinden, antworte extrem kurz, bündig und gesprächig. Maximal 1-3 kurze Sätze! Keine langen Listen oder Aufzählungen.";
+      messages.push({ role: 'system', content: sysPrompt });
+    } else {
+      messages.push({ role: 'system', content: "Antworte extrem kurz, bündig und gesprächig. Maximal 1-3 kurze Sätze!" });
     }
     if (chat) {
       chat.messages.forEach(m => messages.push({ role: m.role, content: m.content }));
