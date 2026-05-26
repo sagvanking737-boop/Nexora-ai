@@ -388,9 +388,12 @@
         </div>
         <div class="setting-group">
           <label class="setting-label">KI-Stimme (Sprachausgabe)</label>
-          <select id="voice-name-select" class="setting-input">
-            <option value="auto">Automatisch (Beste Stimme)</option>
-          </select>
+          <div style="display: flex; gap: 8px;">
+            <select id="voice-name-select" class="setting-input" style="flex: 1;">
+              <option value="auto">Automatisch (Beste Stimme)</option>
+            </select>
+            <button id="test-voice-btn" class="secondary-btn" style="padding: 0 12px; white-space: nowrap;" title="Stimme testen">🔊 Testen</button>
+          </div>
           <span class="setting-hint">Die Stimmen hängen von deinem Betriebssystem und Browser ab.</span>
         </div>
       </div>
