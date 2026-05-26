@@ -134,6 +134,8 @@ Formatierungsregeln:
 - Sei präzise und direkt in deinen Antworten`,
     maxTokens: 8192,
     temperature: 0.7,
+    voiceLanguage: 'de-DE',
+    voiceVoice: 'auto',
   },
 };
 
@@ -176,6 +178,8 @@ const els = {
   maxTokensInput:    $('max-tokens-input'),
   tempSlider:        $('temp-slider'),
   tempValue:         $('temp-value'),
+  voiceLangSelect:   $('voice-lang-select'),
+  voiceNameSelect:   $('voice-name-select'),
   systemPromptModal: $('system-prompt-modal'),
   systemPromptBtn:   $('system-prompt-btn'),
   closeSystemPrompt: $('close-system-prompt'),
@@ -753,16 +757,48 @@ function openSettingsModal() {
   els.maxTokensInput.value = STATE.settings.maxTokens;
   els.tempSlider.value = STATE.settings.temperature;
   els.tempValue.textContent = STATE.settings.temperature;
+  if (els.voiceLangSelect) els.voiceLangSelect.value = STATE.settings.voiceLanguage || 'de-DE';
+  populateVoiceOptions();
+  if (els.voiceNameSelect) els.voiceNameSelect.value = STATE.settings.voiceVoice || 'auto';
   els.settingsModal.classList.remove('hidden');
 }
 
 function closeSettingsModal() { els.settingsModal.classList.add('hidden'); }
+
+function populateVoiceOptions() {
+  if (!('speechSynthesis' in window) || !els.voiceNameSelect || !els.voiceLangSelect) return;
+  const lang = els.voiceLangSelect.value || 'de-DE';
+  const voices = window.speechSynthesis.getVoices();
+  const select = els.voiceNameSelect;
+  
+  const currentVal = select.value;
+  select.innerHTML = '<option value="auto">Automatisch (Beste Stimme)</option>';
+  
+  const langPrefix = lang.split('-')[0];
+  let matchCount = 0;
+  
+  voices.forEach(v => {
+    if (v.lang.startsWith(langPrefix)) {
+      matchCount++;
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `Stimme ${matchCount} (${v.name})`;
+      select.appendChild(opt);
+    }
+  });
+  
+  if (Array.from(select.options).some(o => o.value === currentVal)) {
+    select.value = currentVal;
+  }
+}
 
 function saveSettings() {
   STATE.settings.apiKey       = els.apiKeyInput.value.trim();
   STATE.settings.systemPrompt = els.systemPromptInput.value;
   STATE.settings.maxTokens    = parseInt(els.maxTokensInput.value) || 8192;
   STATE.settings.temperature  = parseFloat(els.tempSlider.value);
+  if (els.voiceLangSelect) STATE.settings.voiceLanguage = els.voiceLangSelect.value;
+  if (els.voiceNameSelect) STATE.settings.voiceVoice = els.voiceNameSelect.value;
   saveToStorage();
   closeSettingsModal();
   showToast('Einstellungen gespeichert ✓', 'success');
@@ -904,6 +940,14 @@ function attachEvents() {
   els.tempSlider.addEventListener('input', () => {
     els.tempValue.textContent = parseFloat(els.tempSlider.value).toFixed(2);
   });
+
+  if (els.voiceLangSelect) {
+    els.voiceLangSelect.addEventListener('change', populateVoiceOptions);
+  }
+
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = populateVoiceOptions;
+  }
 
   // System prompt
   els.systemPromptBtn.addEventListener('click', () => {
@@ -1503,7 +1547,7 @@ async function startVoiceRecognitionInVoiceMode() {
   
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   voiceModeRecognition = new SpeechRecognition();
-  voiceModeRecognition.lang = 'de-DE';
+  voiceModeRecognition.lang = STATE.settings.voiceLanguage || 'de-DE';
   voiceModeRecognition.interimResults = true;
   voiceModeRecognition.continuous = false;
   
@@ -1724,13 +1768,24 @@ function playNextSentence() {
   spokenIndex++;
   
   const utterance = new SpeechSynthesisUtterance(sentence);
-  utterance.lang = 'de-DE';
+  const lang = STATE.settings.voiceLanguage || 'de-DE';
+  utterance.lang = lang;
   
   const voices = window.speechSynthesis.getVoices();
-  const deVoice = voices.find(v => v.lang.startsWith('de') && v.name.includes('Google')) ||
-                  voices.find(v => v.lang.startsWith('de')) ||
-                  voices[0];
-  if (deVoice) utterance.voice = deVoice;
+  const prefVoiceName = STATE.settings.voiceVoice;
+  
+  let selectedVoice = null;
+  if (prefVoiceName && prefVoiceName !== 'auto') {
+    selectedVoice = voices.find(v => v.name === prefVoiceName);
+  }
+  
+  if (!selectedVoice) {
+    const langPrefix = lang.split('-')[0];
+    selectedVoice = voices.find(v => v.lang.startsWith(langPrefix) && v.name.includes('Google')) ||
+                    voices.find(v => v.lang.startsWith(langPrefix)) ||
+                    voices[0];
+  }
+  if (selectedVoice) utterance.voice = selectedVoice;
   
   utterance.onstart = () => {
     els.voiceStatus.textContent = 'Nexora spricht...';
