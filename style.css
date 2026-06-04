@@ -2006,4 +2006,62 @@ html, body {
   transform: translateY(0);
 }
 
+/* ==============================
+   IMAGE UPLOADER (Code Mode)
+   ============================== */
 
+.image-preview-area {
+  padding: 8px 12px 4px;
+  animation: slideIn 0.2s ease;
+}
+
+.image-preview-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+}
+
+.image-preview-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.image-preview-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-preview-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: all 0.12s;
+}
+.image-preview-remove:hover {
+  color: #f87171;
+  background: rgba(248,113,113,0.1);
+}
+
+#image-upload-btn {
+  position: relative;
+}
+#image-upload-btn.has-image {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
