@@ -53,7 +53,7 @@ saveDB();
 
 const ADMIN_USERNAME = 'Sagvan/admin';
 const ADMIN_PASSWORD = 'Nexora2026';
-const OPENROUTER_API_KEY = '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'; // ACHTUNG: Hier den neuen Key von OpenRouter eintragen!
+const OPENROUTER_API_KEY = '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';
 
 function adminAuth(req, res, next) {
   const authHeader = req.headers.authorization;
