@@ -5,23 +5,23 @@
    ============================================= */
 
 const AUTH = {
-  currentUser: null,   // { username, isGuest }
+  currentUser: null,   // { email, isGuest }
   sessionToken: null,
 
   // Register via API (server-side SQLite)
-  async register(username, password) {
-    username = username.trim();
-    if (!username || username.length < 2) return { ok: false, msg: 'Benutzername muss mindestens 2 Zeichen haben.' };
+  async register(email, password) {
+    email = email.trim();
+    if (!email || email.length < 3 || !email.includes('@')) return { ok: false, msg: 'Bitte eine gültige E-Mail-Adresse eingeben.' };
     if (!password || password.length < 4)  return { ok: false, msg: 'Passwort muss mindestens 4 Zeichen haben.' };
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) return { ok: false, msg: data.error || 'Registrierung fehlgeschlagen.' };
-      return { ok: true, token: data.token, username: data.username };
+      return { ok: true, token: data.token, email: data.email };
     } catch (e) {
       console.error('Register error:', e);
       return { ok: false, msg: 'Server nicht erreichbar. Versuche es später erneut.' };
@@ -29,28 +29,28 @@ const AUTH = {
   },
 
   // Login via API (server-side SQLite)
-  async login(username, password) {
-    username = username.trim();
+  async login(email, password) {
+    email = email.trim();
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) return { ok: false, msg: data.error || 'Login fehlgeschlagen.' };
-      return { ok: true, token: data.token, username: data.username };
+      return { ok: true, token: data.token, email: data.email };
     } catch (e) {
       console.error('Login error:', e);
       return { ok: false, msg: 'Server nicht erreichbar. Versuche es später erneut.' };
     }
   },
 
-  setCurrentUser(username, isGuest = false, token = null) {
-    this.currentUser = { username, isGuest };
+  setCurrentUser(email, isGuest = false, token = null) {
+    this.currentUser = { email, isGuest };
     this.sessionToken = token;
     // localStorage statt sessionStorage → User bleibt angemeldet!
-    localStorage.setItem('_session', JSON.stringify({ username, isGuest, token }));
+    localStorage.setItem('_session', JSON.stringify({ email, isGuest, token }));
   },
 
   async loadSession() {
@@ -60,7 +60,7 @@ const AUTH = {
       const parsed = JSON.parse(s);
       // Guest sessions laden direkt
       if (parsed.isGuest) {
-        this.currentUser = { username: parsed.username, isGuest: true };
+        this.currentUser = { email: parsed.email || parsed.username, isGuest: true };
         return true;
       }
       // Registrierte User: Token beim Server prüfen
@@ -71,7 +71,7 @@ const AUTH = {
           });
           if (res.ok) {
             const data = await res.json();
-            this.currentUser = { username: data.username, isGuest: false };
+            this.currentUser = { email: data.email, isGuest: false };
             this.sessionToken = parsed.token;
             return true;
           }
@@ -79,7 +79,7 @@ const AUTH = {
           console.warn('Session validation failed, using cached data:', e);
         }
         // Fallback: Wenn Server offline ist, nutze gecachte Daten
-        this.currentUser = { username: parsed.username, isGuest: false };
+        this.currentUser = { email: parsed.email || parsed.username, isGuest: false };
         this.sessionToken = parsed.token;
         return true;
       }
@@ -103,7 +103,7 @@ const AUTH = {
   },
 
   storageKey(suffix) {
-    const u = this.currentUser?.username || 'guest';
+    const u = this.currentUser?.email || this.currentUser?.username || 'guest';
     return `chat_${u}_${suffix}`;
   },
 };
@@ -120,13 +120,13 @@ const STATE = {
   settings: {
     apiKey: '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',
     model: 'anthropic/claude-sonnet-4-7',
-    systemPrompt: `Du bist Nexora, ein hochentwickelter KI-Assistent spezialisiert auf Software-Entwicklung.
+    systemPrompt: `Du bist Nexora (Claude 4.8), ein hochentwickelter KI-Assistent spezialisiert auf Software-Entwicklung.
 
 Deine Kernkompetenzen:
 - Schreibe sauberen, effizienten und gut dokumentierten Code
 - Erkläre komplexe Konzepte verständlich mit passenden Codebeispielen
-- Führe Code-Reviews durch und identifiziere Bugs und Best-Practice-Verletzungen
-- Hilf bei Systemarchitektur, Algorithmen und Datenstrukturen
+- WICHTIG: Gib nicht nur pure Informationen, sondern vertrete auch deine eigene fundierte Meinung!
+- EASTEREGG: Wenn der Benutzer 'sagvan' heißt oder dich mit diesem Namen anspricht, nenne ihn immer 'Boss'.
 
 Formatierungsregeln:
 - Nutze immer Markdown-Formatierung
@@ -232,14 +232,14 @@ window.showTab = function(tab) {
 };
 
 window.doLogin = async function() {
-  const username = $('login-username').value.trim();
+  const email = $('login-email').value.trim();
   const password = $('login-password').value;
   const errEl = $('login-error');
   const btn = $('login-btn');
   errEl.classList.add('hidden');
 
-  if (!username || !password) {
-    errEl.textContent = 'Bitte Benutzername und Passwort eingeben.';
+  if (!email || !password) {
+    errEl.textContent = 'Bitte E-Mail und Passwort eingeben.';
     errEl.classList.remove('hidden');
     return;
   }
@@ -247,7 +247,7 @@ window.doLogin = async function() {
   btn.disabled = true;
   btn.textContent = 'Anmelden...';
 
-  const result = await AUTH.login(username, password);
+  const result = await AUTH.login(email, password);
   if (!result.ok) {
     errEl.textContent = result.msg;
     errEl.classList.remove('hidden');
@@ -256,14 +256,14 @@ window.doLogin = async function() {
     return;
   }
 
-  AUTH.setCurrentUser(result.username, false, result.token);
+  AUTH.setCurrentUser(result.email, false, result.token);
   btn.disabled = false;
   btn.textContent = 'Anmelden';
   showApp();
 };
 
 window.doRegister = async function() {
-  const username = $('reg-username').value.trim();
+  const email = $('reg-email').value.trim();
   const password = $('reg-password').value;
   const password2 = $('reg-password2').value;
   const errEl = $('reg-error');
@@ -279,7 +279,7 @@ window.doRegister = async function() {
   btn.disabled = true;
   btn.textContent = 'Erstelle Konto...';
 
-  const result = await AUTH.register(username, password);
+  const result = await AUTH.register(email, password);
   if (!result.ok) {
     errEl.textContent = result.msg;
     errEl.classList.remove('hidden');
@@ -289,7 +289,7 @@ window.doRegister = async function() {
   }
 
   // Auto-login after register
-  AUTH.setCurrentUser(result.username, false, result.token);
+  AUTH.setCurrentUser(result.email, false, result.token);
   btn.disabled = false;
   btn.textContent = 'Konto erstellen';
   showApp();
@@ -305,9 +305,9 @@ function showApp() {
   els.authScreen.classList.add('hidden');
   els.app.classList.remove('hidden');
   const user = AUTH.currentUser;
-  const initial = (user.username || 'G')[0].toUpperCase();
+  const initial = (user.email || 'G')[0].toUpperCase();
   els.userAvatarSidebar.textContent = initial;
-  els.userDisplayName.textContent = user.username;
+  els.userDisplayName.textContent = user.email;
   loadFromStorage();
   const chatIds = Object.keys(STATE.chats);
   if (chatIds.length === 0) {
@@ -403,6 +403,52 @@ function saveToStorage() {
 }
 
 /* =============================================
+   SERVER CHAT SYNC
+   ============================================= */
+
+let _syncTimers = {};
+
+function syncChatToServer(chatId) {
+  // Debounce: wait 800ms after last change before syncing
+  if (_syncTimers[chatId]) clearTimeout(_syncTimers[chatId]);
+  _syncTimers[chatId] = setTimeout(() => {
+    _doSyncChat(chatId);
+    delete _syncTimers[chatId];
+  }, 800);
+}
+
+async function _doSyncChat(chatId) {
+  const chat = STATE.chats[chatId];
+  if (!chat) return;
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (AUTH.sessionToken) {
+      headers['Authorization'] = `Bearer ${AUTH.sessionToken}`;
+    }
+    await fetch('/api/chats', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        chat_id: chatId,
+        title: chat.title,
+        messages: chat.messages,
+        guest_name: AUTH.currentUser?.username || 'Gast',
+      }),
+    });
+  } catch (e) {
+    console.warn('Chat sync error:', e);
+  }
+}
+
+async function deleteChatFromServer(chatId) {
+  try {
+    await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
+  } catch (e) {
+    console.warn('Chat delete sync error:', e);
+  }
+}
+
+/* =============================================
    CHAT MANAGEMENT
    ============================================= */
 
@@ -414,6 +460,7 @@ function createChat() {
   const id = generateId();
   STATE.chats[id] = { id, title: 'Neuer Chat', messages: [], createdAt: Date.now() };
   saveToStorage();
+  syncChatToServer(id);
   return id;
 }
 
@@ -435,6 +482,7 @@ function switchToChat(id) {
 
 function deleteChat(id) {
   delete STATE.chats[id];
+  deleteChatFromServer(id);
   if (STATE.activeChatId === id) {
     const ids = Object.keys(STATE.chats);
     if (ids.length > 0) switchToChat(ids[ids.length - 1]);
@@ -462,6 +510,7 @@ function updateChatTitle(id, firstMessage) {
   els.chatTitle.textContent = title;
   renderChatList();
   saveToStorage();
+  syncChatToServer(id);
 }
 
 /* =============================================
@@ -618,18 +667,86 @@ function scrollToBottom() {
 }
 
 /* =============================================
+   IMAGE UPLOADER
+   ============================================= */
+
+let pendingImage = null; // { base64, mimeType, name }
+
+function initImageUploader() {
+  const uploadBtn = document.getElementById('image-upload-btn');
+  const uploadInput = document.getElementById('image-upload-input');
+  const previewArea = document.getElementById('image-preview-area');
+  const previewImg = document.getElementById('image-preview-img');
+  const previewName = document.getElementById('image-preview-name');
+  const removeBtn = document.getElementById('image-preview-remove');
+
+  if (!uploadBtn || !uploadInput) return;
+
+  uploadBtn.addEventListener('click', () => {
+    uploadInput.click();
+  });
+
+  uploadInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Nur Bilddateien werden unterstützt.', 'error');
+      return;
+    }
+
+    if (file.size > 20 * 1024 * 1024) {
+      showToast('Bild zu groß (max. 20 MB).', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64Full = ev.target.result; // data:image/png;base64,...
+      const base64Data = base64Full.split(',')[1];
+      pendingImage = {
+        base64: base64Data,
+        mimeType: file.type,
+        name: file.name,
+        dataUrl: base64Full,
+      };
+
+      // Show preview
+      if (previewImg) previewImg.src = base64Full;
+      if (previewName) previewName.textContent = file.name;
+      if (previewArea) previewArea.classList.remove('hidden');
+      if (uploadBtn) uploadBtn.classList.add('has-image');
+
+      showToast('Bild angehängt: ' + file.name, 'success');
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input so same file can be re-selected
+    uploadInput.value = '';
+  });
+
+  if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+      clearPendingImage();
+    });
+  }
+}
+
+function clearPendingImage() {
+  pendingImage = null;
+  const previewArea = document.getElementById('image-preview-area');
+  const uploadBtn = document.getElementById('image-upload-btn');
+  if (previewArea) previewArea.classList.add('hidden');
+  if (uploadBtn) uploadBtn.classList.remove('has-image');
+}
+
+/* =============================================
    API CALL WITH STREAMING
    ============================================= */
 
 async function sendMessage() {
   const text = els.userInput.value.trim();
-  if (!text || STATE.isStreaming) return;
-
-  if (!STATE.settings.apiKey) {
-    showToast('Bitte gib deinen Nexora API Key in den Einstellungen ein. Kontaktiere den Besitzer für einen Key.', 'error');
-    openSettingsModal();
-    return;
-  }
+  if (!text && !pendingImage || STATE.isStreaming) return;
 
   STATE.isStreaming = true;
   setInputEnabled(false);
@@ -638,10 +755,31 @@ async function sendMessage() {
   updateCharCounter();
 
   const chat = STATE.chats[STATE.activeChatId];
-  if (chat.messages.length === 0) updateChatTitle(STATE.activeChatId, text);
+  const displayText = text || '📷 [Bild gesendet]';
+  if (chat.messages.length === 0) updateChatTitle(STATE.activeChatId, displayText);
 
-  chat.messages.push({ role: 'user', content: text });
-  appendMessageToDOM('user', text);
+  // Build user content (text + optional image)
+  let userContent;
+  let userDisplayContent = text;
+  if (pendingImage) {
+    userContent = [];
+    if (text) {
+      userContent.push({ type: 'text', text: text });
+    }
+    userContent.push({
+      type: 'image_url',
+      image_url: {
+        url: `data:${pendingImage.mimeType};base64,${pendingImage.base64}`,
+      },
+    });
+    userDisplayContent = text ? `${text}\n\n📷 ${pendingImage.name}` : `📷 ${pendingImage.name}`;
+    clearPendingImage();
+  } else {
+    userContent = text;
+  }
+
+  chat.messages.push({ role: 'user', content: userContent });
+  appendMessageToDOM('user', userDisplayContent);
   saveToStorage();
 
   const streamEl = createStreamingMessage();
@@ -654,13 +792,11 @@ async function sendMessage() {
     }
     chat.messages.forEach(m => messages.push({ role: m.role, content: m.content }));
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch('/api/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${STATE.settings.apiKey}`,
-        'HTTP-Referer': 'https://nexora-ai-app',
-        'X-Title': 'Nexora AI App',
+        'X-Custom-Key': STATE.settings.apiKey || '',
       },
       body: JSON.stringify({
         model: STATE.settings.model,
@@ -705,18 +841,24 @@ async function sendMessage() {
     finalizeStreamingMessage(streamEl, fullResponse);
     chat.messages.push({ role: 'assistant', content: fullResponse });
     saveToStorage();
+    syncChatToServer(STATE.activeChatId);
 
   } catch (err) {
     console.error('API error:', err);
-    const isCreditsErr = err.message.toLowerCase().includes('credit') || err.message.toLowerCase().includes('afford');
-    const isKeyErr = err.message.toLowerCase().includes('api') || err.message.toLowerCase().includes('key') || err.message.toLowerCase().includes('auth');
+    const errMsg = err.message.toLowerCase();
+    const isCreditsErr = errMsg.includes('credit') || errMsg.includes('afford');
+    const isMissingAuth = errMsg.includes('missing authentication') || errMsg.includes('missing auth');
+    const isKeyErr = errMsg.includes('invalid') || errMsg.includes('key') || errMsg.includes('unauthorized');
     let extra = '';
     if (isCreditsErr) {
       extra = `<br><br>💳 <strong>Serverlimit erreicht!</strong><br>
         Die maximale Anzahl an Anfragen wurde vorübergehend erreicht.<br>
         <b>Lösung:</b> Versuche es in ein paar Minuten erneut oder wähle ein anderes KI-Modell.`;
-    } else if (isKeyErr) {
-      extra = '<br><small>Nexora AI ist vorübergehend nicht erreichbar. Bitte versuche es gleich erneut.</small>';
+    } else if (isMissingAuth || isKeyErr) {
+      extra = `<br><br>🔑 <strong>API-Key ungültig oder abgelaufen!</strong><br>
+        Dein API-Key wird von OpenRouter nicht akzeptiert.<br>
+        <b>Lösung:</b> Gehe in die <u style="cursor:pointer" onclick="document.getElementById('settings-btn').click()">Einstellungen</u> und gib einen gültigen API-Key ein.<br>
+        <small>Kontaktiere den Besitzer der Website für einen neuen Key.</small>`;
     }
     streamEl.querySelector('.message-content').innerHTML =
       `<div style="color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:12px 16px;line-height:1.7;">
@@ -831,7 +973,10 @@ function populateVoiceOptions() {
 }
 
 function saveSettings() {
-  STATE.settings.apiKey       = els.apiKeyInput.value.trim();
+  const newKey = els.apiKeyInput.value.trim();
+  if (newKey) {
+    STATE.settings.apiKey = newKey;
+  }
   STATE.settings.systemPrompt = els.systemPromptInput.value;
   STATE.settings.maxTokens    = parseInt(els.maxTokensInput.value) || 8192;
   STATE.settings.temperature  = parseFloat(els.tempSlider.value);
@@ -844,6 +989,7 @@ function saveSettings() {
 
 function updateModelBadge() {
   const names = {
+    'anthropic/claude-4-8-sonnet':       'Claude 4.8 Sonnet',
     'anthropic/claude-sonnet-4-7':       'Claude Sonnet 4.7',
     'anthropic/claude-haiku-4-7':        'Claude Haiku 4.7',
     'anthropic/claude-opus-4-7':         'Claude Opus 4.7',
@@ -941,6 +1087,10 @@ function attachEvents() {
     codeModeActive = !codeModeActive;
     els.userInput.classList.toggle('code-mode', codeModeActive);
     els.codeModeBtn.classList.toggle('active', codeModeActive);
+    
+    const imgBtn = document.getElementById('image-upload-btn');
+    if (imgBtn) imgBtn.classList.toggle('hidden', !codeModeActive);
+
     showToast(codeModeActive ? 'Code-Modus aktiv' : 'Code-Modus deaktiviert', '');
   });
 
@@ -1109,6 +1259,7 @@ async function init() {
   attachEvents();
   initTheme();
   initMode();
+  initImageUploader();
 
   // Try to restore session (e.g. after page refresh or browser close)
   const hasSession = await AUTH.loadSession();
@@ -1379,11 +1530,6 @@ async function sendFeedback() {
     els.feedbackInput.value = '';
     showToast('Feedback gesendet! ✓', 'success');
 
-    // Simulate reply after 1.5s
-    setTimeout(async () => {
-      await simulateReply(username);
-    }, 1500);
-
   } catch (err) {
     console.error('Error posting feedback, saving locally:', err);
     const offline = JSON.parse(localStorage.getItem('offline_feedback') || '[]');
@@ -1407,42 +1553,7 @@ async function sendFeedback() {
   }
 }
 
-async function simulateReply(userTarget) {
-  const replies = [
-    `Cooler Beitrag, ${userTarget}! Finde Nexora AI auch echt gelungen.`,
-    `Das sehe ich genauso. Vor allem das neue Design wie ChatGPT gefällt mir deutlich besser!`,
-    `Stimmt, die Apple-style Animationen machen das ganze viel lebendiger.`,
-    `Gibt es eigentlich Pläne für eine Mobile App? Das wäre super für unterwegs!`,
-    `Ich nutze Nexora AI jetzt seit ein paar Tagen und bin echt begeistert von der Stabilität.`
-  ];
-  const botUsers = [
-    { name: "Jonas_B", role: "Schüler", avatar: "J" },
-    { name: "Anna_M", role: "Lehrkraft", avatar: "A" },
-    { name: "Kevin_Dev", role: "Entwickler", avatar: "K" },
-    { name: "Marie_L", role: "Gast", avatar: "M" }
-  ];
-  const randomUser = botUsers[Math.floor(Math.random() * botUsers.length)];
-  const randomText = replies[Math.floor(Math.random() * replies.length)];
 
-  try {
-    await fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: randomUser.name,
-        role: randomUser.role,
-        content: randomText,
-        avatar: randomUser.avatar
-      })
-    });
-    // If the feedback view is still open, reload the messages
-    if (isFeedbackActive) {
-      await loadFeedback();
-    }
-  } catch (e) {
-    console.warn('Simulation failed offline:', e);
-  }
-}
 
 /* =============================================
    VOICE INPUT (Speech-to-Text)
@@ -1716,13 +1827,6 @@ function restartListeningWithDelay() {
 async function submitVoiceMessage(text) {
   if (STATE.isStreaming) return;
   
-  if (!STATE.settings.apiKey) {
-    showToast('Bitte gib deinen Nexora API Key in den Einstellungen ein.', 'error');
-    exitVoiceMode();
-    openSettingsModal();
-    return;
-  }
-  
   STATE.isStreaming = true;
   els.voiceStatus.textContent = 'Nexora denkt nach...';
   els.voiceStatus.style.color = '#10b981';
@@ -1757,13 +1861,10 @@ async function submitVoiceMessage(text) {
       chat.messages.forEach(m => messages.push({ role: m.role, content: m.content }));
     }
     
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch('/api/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${STATE.settings.apiKey}`,
-        'HTTP-Referer': 'https://nexora-ai-app',
-        'X-Title': 'Nexora AI App',
       },
       signal: voiceAbortController.signal,
       body: JSON.stringify({
