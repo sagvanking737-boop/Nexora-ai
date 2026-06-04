@@ -856,7 +856,7 @@ async function sendMessage() {
         <b>Lösung:</b> Versuche es in ein paar Minuten erneut oder wähle ein anderes KI-Modell.`;
     } else if (isMissingAuth || isKeyErr) {
       extra = `<br><br>🔑 <strong>API-Key ungültig oder abgelaufen!</strong><br>
-        Dein API-Key wird von OpenRouter nicht akzeptiert.<br>
+        Dein API-Key wird vom KI-Anbieter nicht akzeptiert.<br>
         <b>Lösung:</b> Gehe in die <u style="cursor:pointer" onclick="document.getElementById('settings-btn').click()">Einstellungen</u> und gib einen gültigen API-Key ein.<br>
         <small>Kontaktiere den Besitzer der Website für einen neuen Key.</small>`;
     }
