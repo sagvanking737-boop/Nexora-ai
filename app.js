@@ -845,24 +845,9 @@ async function sendMessage() {
 
   } catch (err) {
     console.error('API error:', err);
-    const errMsg = err.message.toLowerCase();
-    const isCreditsErr = errMsg.includes('credit') || errMsg.includes('afford');
-    const isMissingAuth = errMsg.includes('missing authentication') || errMsg.includes('missing auth');
-    const isKeyErr = errMsg.includes('invalid') || errMsg.includes('key') || errMsg.includes('unauthorized');
-    let extra = '';
-    if (isCreditsErr) {
-      extra = `<br><br>💳 <strong>Serverlimit erreicht!</strong><br>
-        Die maximale Anzahl an Anfragen wurde vorübergehend erreicht.<br>
-        <b>Lösung:</b> Versuche es in ein paar Minuten erneut oder wähle ein anderes KI-Modell.`;
-    } else if (isMissingAuth || isKeyErr) {
-      extra = `<br><br>🔑 <strong>API-Key ungültig oder abgelaufen!</strong><br>
-        Dein API-Key wird vom KI-Anbieter nicht akzeptiert.<br>
-        <b>Lösung:</b> Gehe in die <u style="cursor:pointer" onclick="document.getElementById('settings-btn').click()">Einstellungen</u> und gib einen gültigen API-Key ein.<br>
-        <small>Kontaktiere den Besitzer der Website für einen neuen Key.</small>`;
-    }
     streamEl.querySelector('.message-content').innerHTML =
       `<div style="color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:12px 16px;line-height:1.7;">
-        <strong>Fehler:</strong> ${escapeHtml(err.message)}${extra}
+        <strong>Ups!</strong> Nexora ist gerade überlastet. Bitte versuche es in ein paar Sekunden erneut oder wähle ein anderes Modell.
       </div>`;
   } finally {
     STATE.isStreaming = false;
