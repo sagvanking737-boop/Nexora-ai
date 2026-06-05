@@ -857,6 +857,196 @@ async function sendMessage() {
 }
 
 /* =============================================
+   GOD MODE — Multiple AIs Race
+   ============================================= */
+
+let godModeActive = false;
+
+const GODMODE_MODELS = [
+  { id: 'google/gemma-4-26b-a4b-it:free', name: 'Gemma 4 26B', color: '#4285f4' },
+  { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B', color: '#8b5cf6' },
+  { id: 'deepseek/deepseek-v4-flash:free', name: 'DeepSeek V4', color: '#06b6d4' },
+  { id: 'qwen/qwen3-coder:free', name: 'Qwen 3 Coder', color: '#f59e0b' },
+];
+
+async function sendGodMode() {
+  const text = els.userInput.value.trim();
+  if (!text || STATE.isStreaming) return;
+
+  STATE.isStreaming = true;
+  setInputEnabled(false);
+  els.userInput.value = '';
+  autoResizeTextarea();
+  updateCharCounter();
+
+  const chat = STATE.chats[STATE.activeChatId];
+  if (chat.messages.length === 0) updateChatTitle(STATE.activeChatId, text);
+
+  chat.messages.push({ role: 'user', content: text });
+  appendMessageToDOM('user', text);
+  saveToStorage();
+
+  // Build messages array
+  const apiMessages = [];
+  if (STATE.settings.systemPrompt.trim()) {
+    apiMessages.push({ role: 'system', content: STATE.settings.systemPrompt.trim() });
+  }
+  chat.messages.forEach(m => apiMessages.push({ role: m.role, content: m.content }));
+
+  // Create God Mode response grid
+  els.welcomeScreen.classList.add('hidden');
+  const gridEl = document.createElement('div');
+  gridEl.className = 'godmode-responses';
+
+  const cards = {};
+  const results = {};
+  const startTimes = {};
+
+  GODMODE_MODELS.forEach(model => {
+    startTimes[model.id] = Date.now();
+    results[model.id] = '';
+
+    const card = document.createElement('div');
+    card.className = 'godmode-card';
+    card.innerHTML = `
+      <div class="godmode-card-header">
+        <span class="godmode-model-name">
+          <span class="godmode-model-dot" style="background:${model.color};" id="dot-${model.id.replace(/[\/:.]/g,'_')}"></span>
+          ${model.name}
+        </span>
+        <span class="godmode-time" id="time-${model.id.replace(/[\/:.]/g,'_')}">lädt...</span>
+      </div>
+      <div class="godmode-card-body" id="body-${model.id.replace(/[\/:.]/g,'_')}">
+        <div class="thinking-indicator">
+          <div class="soundwave-bars"><span></span><span></span><span></span><span></span><span></span></div>
+          <span>denkt nach...</span>
+        </div>
+      </div>
+      <div class="godmode-card-footer">
+        <span style="font-size:11px;color:var(--text-muted);">⚡ ${model.name}</span>
+        <button class="godmode-pick-btn" id="pick-${model.id.replace(/[\/:.]/g,'_')}">Auswählen</button>
+      </div>`;
+    gridEl.appendChild(card);
+    cards[model.id] = card;
+  });
+
+  els.messages.appendChild(gridEl);
+  scrollToBottom();
+
+  // Fire all models in parallel
+  const promises = GODMODE_MODELS.map(model => streamGodModeModel(model, apiMessages, results, startTimes));
+
+  // Add pick button handlers
+  GODMODE_MODELS.forEach(model => {
+    const safeId = model.id.replace(/[\/:.]/g, '_');
+    const pickBtn = document.getElementById(`pick-${safeId}`);
+    if (pickBtn) {
+      pickBtn.addEventListener('click', () => {
+        const response = results[model.id];
+        if (!response) return;
+
+        // Save picked response to chat
+        chat.messages.push({ role: 'assistant', content: response });
+        saveToStorage();
+        syncChatToServer(STATE.activeChatId);
+
+        // Mark as picked
+        pickBtn.textContent = '✓ Gewählt';
+        pickBtn.classList.add('picked');
+
+        // Disable all other pick buttons
+        GODMODE_MODELS.forEach(m => {
+          const otherId = m.id.replace(/[\/:.]/g, '_');
+          const otherBtn = document.getElementById(`pick-${otherId}`);
+          if (otherBtn && m.id !== model.id) {
+            otherBtn.disabled = true;
+            otherBtn.style.opacity = '0.4';
+          }
+        });
+
+        showToast(`${model.name} Antwort gespeichert ✓`, 'success');
+      });
+    }
+  });
+
+  await Promise.allSettled(promises);
+
+  STATE.isStreaming = false;
+  setInputEnabled(true);
+  els.userInput.focus();
+}
+
+async function streamGodModeModel(model, messages, results, startTimes) {
+  const safeId = model.id.replace(/[\/:.]/g, '_');
+  const bodyEl = document.getElementById(`body-${safeId}`);
+  const timeEl = document.getElementById(`time-${safeId}`);
+  const dotEl = document.getElementById(`dot-${safeId}`);
+
+  try {
+    const response = await fetch('/api/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Custom-Key': STATE.settings.apiKey || '',
+      },
+      body: JSON.stringify({
+        model: model.id,
+        max_tokens: 2048,
+        temperature: STATE.settings.temperature,
+        stream: true,
+        messages,
+      }),
+    });
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+        const jsonStr = trimmed.slice(6);
+        if (jsonStr === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(jsonStr);
+          const delta = evt.choices?.[0]?.delta?.content;
+          if (delta) {
+            fullText += delta;
+            results[model.id] = fullText;
+            if (bodyEl) bodyEl.innerHTML = renderMarkdown(fullText);
+            scrollToBottom();
+          }
+        } catch {}
+      }
+    }
+
+    // Done
+    const elapsed = ((Date.now() - startTimes[model.id]) / 1000).toFixed(1);
+    if (timeEl) timeEl.textContent = `${elapsed}s`;
+    if (dotEl) { dotEl.classList.add('done'); dotEl.style.background = '#22c55e'; }
+    if (bodyEl) {
+      bodyEl.innerHTML = renderMarkdown(fullText);
+      bodyEl.querySelectorAll('.copy-btn').forEach(btn => attachCopyBtn(btn));
+    }
+
+  } catch (err) {
+    console.error(`God Mode error (${model.name}):`, err);
+    if (bodyEl) bodyEl.innerHTML = `<span style="color:#f87171;">Fehler: Modell nicht verfügbar</span>`;
+    if (timeEl) timeEl.textContent = '✗';
+    if (dotEl) { dotEl.classList.add('done'); dotEl.style.background = '#f87171'; }
+  }
+}
+
+/* =============================================
    INPUT HANDLING
    ============================================= */
 
@@ -1052,10 +1242,14 @@ function attachEvents() {
   if (els.sidebarOverlay) els.sidebarOverlay.addEventListener('click', () => els.sidebar.classList.remove('open'));
   els.newChatBtn.addEventListener('click', startNewChat);
 
-  // Send
-  els.sendBtn.addEventListener('click', sendMessage);
+  // Send (routes to God Mode or normal)
+  function dispatchSend() {
+    if (godModeActive) sendGodMode();
+    else sendMessage();
+  }
+  els.sendBtn.addEventListener('click', dispatchSend);
   els.userInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); dispatchSend(); }
     if (e.key === 'Tab') {
       e.preventDefault();
       const s = els.userInput.selectionStart, end = els.userInput.selectionEnd;
@@ -1078,6 +1272,20 @@ function attachEvents() {
 
     showToast(codeModeActive ? 'Code-Modus aktiv' : 'Code-Modus deaktiviert', '');
   });
+
+  // God Mode toggle
+  const godmodeBtn = document.getElementById('godmode-btn');
+  if (godmodeBtn) {
+    godmodeBtn.addEventListener('click', () => {
+      godModeActive = !godModeActive;
+      godmodeBtn.classList.toggle('active', godModeActive);
+      if (godModeActive) {
+        showToast('⚡ GOD MODE AKTIVIERT — 4 KIs kämpfen um die beste Antwort!', 'success');
+      } else {
+        showToast('God Mode deaktiviert', '');
+      }
+    });
+  }
 
   // Model
   els.modelSelect.addEventListener('change', () => {
