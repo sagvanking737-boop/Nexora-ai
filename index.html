@@ -49,7 +49,7 @@
         </div>
         <div id="login-error" class="auth-error hidden"></div>
         <button class="auth-btn" id="login-btn" onclick="doLogin()">Anmelden</button>
-        <button class="auth-btn auth-btn-secondary" onclick="doGuestLogin()">Als Gast fortfahren</button>
+        <p class="auth-guest-hint">Noch kein Konto? <a href="#" onclick="showTab('register'); return false;">Jetzt registrieren</a> — kostenlos!</p>
       </div>
 
       <!-- Register Form -->
@@ -96,7 +96,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
-          💬 Feedback-Kanal
+          Feedback-Kanal
         </button>
       </div>
 
@@ -106,18 +106,44 @@
       </div>
 
       <div class="sidebar-bottom">
+        <!-- API Key & Usage Display -->
+        <div id="api-key-section" class="api-key-section hidden">
+          <div class="api-key-header">
+            <span class="api-key-label">Dein API-Key</span>
+            <span id="tier-badge" class="tier-badge tier-free">FREE</span>
+          </div>
+          <div class="api-key-display">
+            <code id="api-key-value" class="api-key-value">nxr-free-...</code>
+            <button id="copy-api-key" class="api-key-copy-btn" title="Key kopieren">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+          <div class="usage-bar-wrap">
+            <div class="usage-bar-label">
+              <span>Guthaben:</span>
+              <span id="usage-count">0 Credits</span>
+            </div>
+            <div class="usage-bar-track">
+              <div id="usage-bar-fill" class="usage-bar-fill" style="width: 0%"></div>
+            </div>
+          </div>
+          <button id="sidebar-upgrade-btn" class="sidebar-upgrade-btn">
+            Auf Premium upgraden
+          </button>
+        </div>
+
         <div class="model-selector-wrap">
           <label class="model-label">Modell</label>
           <select id="model-select" class="model-select">
             <optgroup label="── Nexora Free ──">
-              <option value="google/gemma-4-26b-a4b-it:free">Gemma 4 26B (Kostenlos) 🟢</option>
-              <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Kostenlos) 🟢</option>
-              <option value="deepseek/deepseek-v4-flash:free">DeepSeek V4 (Kostenlos) 🧠</option>
-              <option value="qwen/qwen3-coder:free">Qwen 3 Coder (Kostenlos) 🚀</option>
-              <option value="openrouter/free">Nexora Auto ⚡</option>
+              <option value="google/gemma-4-26b-a4b-it:free">Gemma 4 26B (Kostenlos)</option>
+              <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Kostenlos)</option>
+              <option value="deepseek/deepseek-v4-flash:free">DeepSeek V4 (Kostenlos)</option>
+              <option value="qwen/qwen3-coder:free">Qwen 3 Coder (Kostenlos)</option>
+              <option value="openrouter/free">Nexora Auto</option>
             </optgroup>
             <optgroup label="── Nexora Pro ──">
-              <option value="anthropic/claude-4-8-sonnet" selected>Claude 4.8 Sonnet ⚡</option>
+              <option value="anthropic/claude-4-8-sonnet" selected>Claude 4.8 Sonnet</option>
               <option value="anthropic/claude-sonnet-4-7">Claude Sonnet 4.7</option>
               <option value="anthropic/claude-haiku-4-7">Claude Haiku 4.7</option>
               <option value="anthropic/claude-opus-4-7">Claude Opus 4.7</option>
@@ -128,6 +154,7 @@
               <option value="anthropic/claude-opus-4-5">Claude Opus 4.5</option>
             </optgroup>
             <optgroup label="── Weitere Modelle ──">
+              <option value="anthropic/claude-3.5-sonnet:beta">Fable 5</option>
               <option value="anthropic/claude-3-7-sonnet">Claude 3.7 Sonnet</option>
               <option value="google/gemini-2.5-pro-preview">Gemini 2.5 Pro</option>
               <option value="openai/gpt-4o">GPT-4o</option>
@@ -139,10 +166,10 @@
         <div class="mode-selector-wrap">
           <label class="model-label">Modus</label>
           <select id="mode-select" class="mode-select">
-            <option value="general">🌐 Standard-Assistent</option>
-            <option value="homework">📚 Hausaufgaben-Helfer</option>
-            <option value="code">💻 Programmier-Modus</option>
-            <option value="teacher">🎓 Lehrer-Assistent</option>
+            <option value="general">Standard-Assistent</option>
+            <option value="homework">Hausaufgaben-Helfer</option>
+            <option value="code">Programmier-Modus</option>
+            <option value="teacher">Lehrer-Assistent</option>
           </select>
         </div>
 
@@ -191,7 +218,7 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
             </svg>
-            Upgrade ⭐
+            Upgrade
           </button>
           <button id="clear-chat-btn" class="icon-btn" title="Chat löschen">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -216,27 +243,27 @@
           <p style="color:var(--text-muted);font-size:13px;margin-top:-4px;margin-bottom:8px;">Nexora-AI.com — Dein intelligenter KI-Assistent</p>
           <div class="suggestions-grid">
             <button class="suggestion-card" data-prompt="Erkläre mir Async/Await in JavaScript mit Beispielen.">
-              <span class="suggestion-icon">⚡</span>
+              <span class="suggestion-icon"></span>
               <span>Async/Await erklären</span>
             </button>
             <button class="suggestion-card" data-prompt="Schreibe mir eine Python-Funktion die eine REST API aufruft und die Antwort als JSON zurückgibt.">
-              <span class="suggestion-icon">🐍</span>
+              <span class="suggestion-icon"></span>
               <span>Python API-Funktion</span>
             </button>
             <button class="suggestion-card" data-prompt="Wie schreibe ich einen effizienten React Hook für Datenabruf mit Caching?">
-              <span class="suggestion-icon">⚛️</span>
+              <span class="suggestion-icon"></span>
               <span>React Custom Hook</span>
             </button>
             <button class="suggestion-card" data-prompt="Erstelle mir eine vollständige Docker Compose Konfiguration für eine Node.js App mit PostgreSQL und Redis.">
-              <span class="suggestion-icon">🐳</span>
+              <span class="suggestion-icon"></span>
               <span>Docker Compose Setup</span>
             </button>
             <button class="suggestion-card" data-prompt="Reviewed meinen Code und gib mir Verbesserungsvorschläge für Clean Code und Performance.">
-              <span class="suggestion-icon">🔍</span>
+              <span class="suggestion-icon"></span>
               <span>Code Review</span>
             </button>
             <button class="suggestion-card" data-prompt="Schreibe unit tests für meine TypeScript-Funktionen mit Jest.">
-              <span class="suggestion-icon">✅</span>
+              <span class="suggestion-icon"></span>
               <span>Unit Tests schreiben</span>
             </button>
           </div>
@@ -247,7 +274,7 @@
       <!-- Feedback Chat Container (hidden by default) -->
       <div id="feedback-container" class="feedback-container hidden">
         <div class="feedback-header">
-          <h2>💬 Öffentlicher Feedback-Chat</h2>
+          <h2>Öffentlicher Feedback-Chat</h2>
           <p>Teile deine Meinung, Vorschläge oder melde Fehler. Deine Nachrichten werden direkt auf dem Server gespeichert und geteilt.</p>
         </div>
         <div id="feedback-messages" class="feedback-messages"></div>
@@ -362,12 +389,16 @@
           <label class="setting-label">Design-Modus</label>
           <div class="theme-toggle-wrap">
             <button class="theme-btn" id="theme-dark-btn" data-theme="dark">
-              <span class="theme-icon">🌙</span> Dunkel
+              <span class="theme-icon"></span> Dunkel
             </button>
             <button class="theme-btn" id="theme-light-btn" data-theme="light">
-              <span class="theme-icon">☀️</span> Hell
+              <span class="theme-icon"></span> Hell
             </button>
           </div>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Nickname</label>
+          <input type="text" id="nickname-input" class="setting-input" placeholder="Dein Nickname..." />
         </div>
         <div class="setting-group">
           <label class="setting-label">Bitte kontaktiere den Besitzer für deinen Key</label>
@@ -417,7 +448,7 @@
             <select id="voice-name-select" class="setting-input" style="flex: 1;">
               <option value="auto">Automatisch (Beste Stimme)</option>
             </select>
-            <button id="test-voice-btn" class="secondary-btn" style="padding: 0 12px; white-space: nowrap;" title="Stimme testen">🔊 Testen</button>
+            <button id="test-voice-btn" class="secondary-btn" style="padding: 0 12px; white-space: nowrap;" title="Stimme testen">Testen</button>
           </div>
           <span class="setting-hint">Die Stimmen hängen von deinem Betriebssystem und Browser ab.</span>
         </div>
@@ -453,7 +484,7 @@
   <div id="subscription-modal" class="modal-overlay hidden">
     <div class="modal subscription-modal-card">
       <div class="modal-header">
-        <h2>Nexora Premium abonnieren</h2>
+        <h2>Nexora Premium</h2>
         <button id="close-subscription" class="icon-btn">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -461,18 +492,32 @@
         </button>
       </div>
       <div class="modal-body subscription-grid">
+        <!-- Free Plan -->
+        <div class="sub-card" id="sub-card-free">
+          <div class="sub-badge sub-free">Kostenlos</div>
+          <h3>Free</h3>
+          <div class="sub-price">0 €<span>/ Monat</span></div>
+          <ul class="sub-features">
+            <li>+ 20 Nachrichten pro Tag</li>
+            <li>+ Kostenlose KI-Modelle</li>
+            <li>+ Grundlegende Funktionen</li>
+            <li>- <span style="opacity:0.5">Kein Zugriff auf Premium-KIs</span></li>
+          </ul>
+          <button class="sub-btn sub-btn-current" disabled>Dein aktuelles Abo</button>
+        </div>
+
         <!-- Basic Plan -->
         <div class="sub-card">
           <div class="sub-badge sub-basic">Einsteiger</div>
           <h3>Basic</h3>
           <div class="sub-price">5,99 €<span>/ Monat</span></div>
           <ul class="sub-features">
-            <li>✓ Zugriff auf alle kostenlosen KIs</li>
-            <li>✓ Höhere Rate-Limits</li>
-            <li>✓ Schnellere Antwortzeiten</li>
-            <li>✓ Standard Support</li>
+            <li>+ 200 Nachrichten pro Tag</li>
+            <li>+ Zugriff auf Claude Haiku</li>
+            <li>+ Schnellere Antwortzeiten</li>
+            <li>+ Standard Support</li>
           </ul>
-          <button class="sub-btn" data-plan="Basic" data-price="5,99 €">Abonnieren</button>
+          <button class="sub-btn sub-btn-contact" data-plan="Basic" data-price="5,99 €">Kontakt aufnehmen</button>
         </div>
 
         <!-- Pro Plan -->
@@ -481,30 +526,48 @@
           <h3>Pro</h3>
           <div class="sub-price">15,99 €<span>/ Monat</span></div>
           <ul class="sub-features">
-            <li>✓ Zugriff auf <strong>alle KIs</strong> inkl. Claude & GPT-4o</li>
-            <li>✓ Maximale Antwortlänge (64k Tokens)</li>
-            <li>✓ Priorisierter Serverzugriff (Keine Wartezeit)</li>
-            <li>✓ Premium Support (24/7)</li>
+            <li>+ Unbegrenzte Nachrichten</li>
+            <li>+ <strong>Alle KIs</strong> inkl. Claude, GPT-4o</li>
+            <li>+ Maximale Antwortlänge (64k Tokens)</li>
+            <li>+ Premium Support (24/7)</li>
           </ul>
-          <button class="sub-btn primary-sub-btn" data-plan="Pro" data-price="15,99 €">Abonnieren</button>
-        </div>
-
-        <!-- Teacher Plan -->
-        <div class="sub-card teacher">
-          <div class="sub-badge sub-teacher">Spezial</div>
-          <h3>Nur für Lehrer</h3>
-          <div class="sub-price">Schul-Tarif<span>/ Custom</span></div>
-          <ul class="sub-features">
-            <li>✓ Speziell für Schulklassen angepasst</li>
-            <li>✓ DSGVO-konformer Datenschutz</li>
-            <li>✓ Klassenverwaltung & Vorlagen</li>
-            <li>✓ Lehrer-Adminbereich & Analysen</li>
-          </ul>
-          <button class="sub-btn teacher-sub-btn" data-plan="Lehrer" data-price="Schul-Tarif">Für Klassen anfragen</button>
+          <button class="sub-btn primary-sub-btn sub-btn-contact" data-plan="Pro" data-price="15,99 €">Kontakt aufnehmen</button>
         </div>
       </div>
       <div class="modal-footer subscription-footer">
-        <p class="sub-disclaimer">⭐ <strong>Demo-Hinweis:</strong> Dies ist ein visueller Showcase. In dieser Demo-Version fallen keine Kosten an und es können keine echten Käufe getätigt werden.</p>
+        <p class="sub-disclaimer">Kontaktiere uns per WhatsApp oder Anruf für dein Upgrade. Dein Abo wird manuell freigeschaltet.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Modal (for subscription) -->
+  <div id="contact-modal" class="modal-overlay hidden">
+    <div class="modal contact-modal-card">
+      <div class="modal-header">
+        <h2>Premium bestellen</h2>
+        <button id="close-contact-modal" class="icon-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body contact-modal-body">
+        <p class="contact-intro">Du möchtest <strong id="contact-plan-name">Pro</strong> (<span id="contact-plan-price">15,99 €/Monat</span>) bestellen?</p>
+        <p class="contact-subtitle">Kontaktiere uns und wir schalten dein Upgrade sofort frei:</p>
+        <div class="contact-number-display">
+          <span class="contact-phone-icon"></span>
+          <span class="contact-phone-number">015738372862</span>
+        </div>
+        <div class="contact-buttons">
+          <a href="https://wa.me/4915738372862?text=Hallo%2C%20ich%20m%C3%B6chte%20Nexora%20Premium%20bestellen!%20Plan%3A%20" id="whatsapp-link" class="contact-btn contact-btn-whatsapp" target="_blank">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            WhatsApp öffnen
+          </a>
+          <a href="tel:+4915738372862" class="contact-btn contact-btn-phone">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            Anrufen
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -552,6 +615,30 @@
           </svg>
           Beenden
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- God Mode Modal -->
+  <div id="godmode-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>God Mode Modelle</h2>
+        <button id="close-godmode-modal" class="icon-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 12px; color: var(--text-secondary);">Wähle bis zu 4 Modelle für den God Mode aus:</p>
+        <div id="godmode-models-list" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancel-godmode-btn" class="secondary-btn">Abbrechen</button>
+        <button id="start-godmode-btn" class="primary-btn">God Mode starten</button>
       </div>
     </div>
   </div>
