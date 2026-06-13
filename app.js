@@ -864,7 +864,7 @@ async function sendMessage() {
     console.error('API error:', err);
     let errorMsg = 'Nexora ist gerade überlastet. Bitte versuche es in ein paar Sekunden erneut oder wähle ein anderes Modell.';
     const errStr = err.message || '';
-    if (errStr.includes('Tageslimit')) {
+    if (errStr.includes('Tageslimit') || errStr.includes('Unzureichendes Guthaben')) {
       errorMsg = errStr;
     } else if (errStr.includes('Premium-User') || errStr.includes('nur für')) {
       errorMsg = errStr + ' <button onclick="document.getElementById(\'subscription-modal\').classList.remove(\'hidden\')" style="background:#19c37d;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;margin-left:8px;">Upgrade</button>';
