@@ -2192,3 +2192,292 @@ html, body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==============================
+   API KEY SECTION (Sidebar)
+   ============================== */
+
+.api-key-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 4px;
+}
+
+.api-key-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.api-key-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.tier-badge {
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tier-free {
+  background: rgba(255,255,255,0.08);
+  color: #999;
+}
+
+.tier-basic {
+  background: rgba(245,158,11,0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245,158,11,0.3);
+  animation: tierGlow 2s ease-in-out infinite alternate;
+}
+
+.tier-pro {
+  background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(236,72,153,0.2));
+  color: #a78bfa;
+  border: 1px solid rgba(139,92,246,0.3);
+  animation: tierGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes tierGlow {
+  from { box-shadow: 0 0 4px rgba(139,92,246,0.1); }
+  to { box-shadow: 0 0 12px rgba(139,92,246,0.3); }
+}
+
+.api-key-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.api-key-value {
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(0,0,0,0.2);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-copy-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+}
+
+.api-key-copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(25,195,125,0.05);
+}
+
+.usage-bar-wrap {
+  margin-bottom: 8px;
+}
+
+.usage-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.usage-bar-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.usage-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #19c37d, #10b981);
+  transition: width 0.5s ease, background 0.3s ease;
+  min-width: 0;
+}
+
+.sidebar-upgrade-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(139,92,246,0.3);
+  background: linear-gradient(135deg, rgba(139,92,246,0.1), rgba(236,72,153,0.1));
+  color: #a78bfa;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-ui);
+}
+
+.sidebar-upgrade-btn:hover {
+  background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(236,72,153,0.2));
+  border-color: rgba(139,92,246,0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139,92,246,0.2);
+}
+
+/* ==============================
+   CONTACT MODAL
+   ============================== */
+
+.contact-modal-card {
+  max-width: 420px !important;
+}
+
+.contact-modal-body {
+  text-align: center;
+  padding: 20px 24px !important;
+}
+
+.contact-intro {
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.contact-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.contact-number-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  background: rgba(25,195,125,0.08);
+  border: 1px solid rgba(25,195,125,0.2);
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+}
+
+.contact-phone-icon {
+  font-size: 24px;
+}
+
+.contact-phone-number {
+  font-family: var(--font-code);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+
+.contact-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.contact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-family: var(--font-ui);
+}
+
+.contact-btn-whatsapp {
+  background: #25d366;
+  color: white;
+}
+
+.contact-btn-whatsapp:hover {
+  background: #1eb955;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37,211,102,0.3);
+}
+
+.contact-btn-phone {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.contact-btn-phone:hover {
+  background: rgba(255,255,255,0.15);
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+/* ==============================
+   SUBSCRIPTION MODAL UPDATES
+   ============================== */
+
+.sub-free {
+  background: rgba(255,255,255,0.1);
+  color: #999;
+}
+
+.sub-btn-current {
+  background: rgba(255,255,255,0.05) !important;
+  color: var(--text-muted) !important;
+  cursor: default !important;
+  border: 1px solid var(--border) !important;
+}
+
+.sub-btn-contact {
+  background: linear-gradient(135deg, var(--accent), #0ea5e9) !important;
+  color: white !important;
+  border: none !important;
+}
+
+.sub-btn-contact:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(25,195,125,0.3) !important;
+}
+
+/* ==============================
+   AUTH GUEST HINT
+   ============================== */
+
+.auth-guest-hint {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 12px;
+}
+
+.auth-guest-hint a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.auth-guest-hint a:hover {
+  text-decoration: underline;
+}
