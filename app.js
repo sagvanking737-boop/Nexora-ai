@@ -117,8 +117,14 @@ const STATE = {
   activeChatId: null,
   isStreaming: false,
   voiceModeActive: false,
+  userTier: 'free',
+  userApiKey: null,
+  usageToday: 0,
+  dailyLimit: 20,
+  balance: 0,
   settings: {
-    apiKey: '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',
+    nickname: '',
+    apiKey: '',
     model: 'anthropic/claude-sonnet-4-7',
     systemPrompt: `Du bist Nexora (Claude 4.8), ein hochentwickelter KI-Assistent spezialisiert auf Software-Entwicklung.
 
@@ -173,6 +179,7 @@ const els = {
   cancelSettings:    $('cancel-settings-btn'),
   saveSettings:      $('save-settings-btn'),
   apiKeyInput:       $('api-key-input'),
+  nicknameInput:     $('nickname-input'),
   toggleKeyVis:      $('toggle-key-visibility'),
   systemPromptInput: $('system-prompt-input'),
   maxTokensInput:    $('max-tokens-input'),
@@ -293,12 +300,13 @@ window.doRegister = async function() {
   btn.disabled = false;
   btn.textContent = 'Konto erstellen';
   showApp();
-  showToast('Konto erstellt ✓', 'success');
+  showToast('Konto erstellt', 'success');
 };
 
 window.doGuestLogin = function() {
-  AUTH.setCurrentUser('Gast_' + Math.random().toString(36).slice(2, 6), true);
-  showApp();
+  // Gast-Modus deaktiviert — Registrierung erforderlich
+  showToast('Bitte erstelle ein kostenloses Konto, um Nexora zu nutzen.', 'error');
+  showTab('register');
 };
 
 function showApp() {
@@ -319,9 +327,9 @@ function showApp() {
   renderChatList();
   els.userInput.focus();
   closeSidebarOnMobile();
-  if (STATE.settings.apiKey) {
-    showToast(`Willkommen, ${user.username}! ✓`, 'success');
-  }
+  // Lade API-Key und Usage-Daten
+  loadUserApiKey();
+  showToast(`Willkommen, ${user.email}!`, 'success');
 }
 
 /* =============================================
@@ -744,6 +752,14 @@ function clearPendingImage() {
    API CALL WITH STREAMING
    ============================================= */
 
+function getSystemPrompt() {
+  let prompt = STATE.settings.systemPrompt.trim();
+  if (STATE.settings.nickname) {
+    prompt += `\nDer User moechte mit dem Namen "${STATE.settings.nickname}" angesprochen werden.`;
+  }
+  return prompt;
+}
+
 async function sendMessage() {
   const text = els.userInput.value.trim();
   if (!text && !pendingImage || STATE.isStreaming) return;
@@ -755,7 +771,7 @@ async function sendMessage() {
   updateCharCounter();
 
   const chat = STATE.chats[STATE.activeChatId];
-  const displayText = text || '📷 [Bild gesendet]';
+  const displayText = text || '[Bild gesendet]';
   if (chat.messages.length === 0) updateChatTitle(STATE.activeChatId, displayText);
 
   // Build user content (text + optional image)
@@ -772,7 +788,7 @@ async function sendMessage() {
         url: `data:${pendingImage.mimeType};base64,${pendingImage.base64}`,
       },
     });
-    userDisplayContent = text ? `${text}\n\n📷 ${pendingImage.name}` : `📷 ${pendingImage.name}`;
+    userDisplayContent = text ? `${text}\n\n[Bild] ${pendingImage.name}` : `[Bild] ${pendingImage.name}`;
     clearPendingImage();
   } else {
     userContent = text;
@@ -787,8 +803,9 @@ async function sendMessage() {
 
   try {
     const messages = [];
-    if (STATE.settings.systemPrompt.trim()) {
-      messages.push({ role: 'system', content: STATE.settings.systemPrompt.trim() });
+    const sysP = getSystemPrompt();
+    if (sysP) {
+      messages.push({ role: 'system', content: sysP });
     }
     chat.messages.forEach(m => messages.push({ role: m.role, content: m.content }));
 
@@ -796,7 +813,7 @@ async function sendMessage() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Custom-Key': STATE.settings.apiKey || '',
+        'Authorization': AUTH.sessionToken ? `Bearer ${AUTH.sessionToken}` : '',
       },
       body: JSON.stringify({
         model: STATE.settings.model,
@@ -845,14 +862,24 @@ async function sendMessage() {
 
   } catch (err) {
     console.error('API error:', err);
+    let errorMsg = 'Nexora ist gerade überlastet. Bitte versuche es in ein paar Sekunden erneut oder wähle ein anderes Modell.';
+    const errStr = err.message || '';
+    if (errStr.includes('Tageslimit')) {
+      errorMsg = errStr;
+    } else if (errStr.includes('Premium-User') || errStr.includes('nur für')) {
+      errorMsg = errStr + ' <button onclick="document.getElementById(\'subscription-modal\').classList.remove(\'hidden\')" style="background:#19c37d;color:#fff;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;margin-left:8px;">Upgrade</button>';
+    } else if (errStr.includes('Authentifizierung')) {
+      errorMsg = 'Bitte melde dich an, um Nexora zu nutzen.';
+    }
     streamEl.querySelector('.message-content').innerHTML =
       `<div style="color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:12px 16px;line-height:1.7;">
-        <strong>Ups!</strong> Nexora ist gerade überlastet. Bitte versuche es in ein paar Sekunden erneut oder wähle ein anderes Modell.
+        <strong>Uups!</strong> ${errorMsg}
       </div>`;
   } finally {
     STATE.isStreaming = false;
     setInputEnabled(true);
     els.userInput.focus();
+    loadUserApiKey();
   }
 }
 
@@ -862,12 +889,13 @@ async function sendMessage() {
 
 let godModeActive = false;
 
-const GODMODE_MODELS = [
+let GODMODE_MODELS = [
   { id: 'google/gemma-4-26b-a4b-it:free', name: 'Gemma 4 26B', color: '#4285f4' },
   { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B', color: '#8b5cf6' },
   { id: 'deepseek/deepseek-v4-flash:free', name: 'DeepSeek V4', color: '#06b6d4' },
   { id: 'qwen/qwen3-coder:free', name: 'Qwen 3 Coder', color: '#f59e0b' },
 ];
+let selectedGodModeModels = [...GODMODE_MODELS];
 
 async function sendGodMode() {
   const text = els.userInput.value.trim();
@@ -888,8 +916,9 @@ async function sendGodMode() {
 
   // Build messages array
   const apiMessages = [];
-  if (STATE.settings.systemPrompt.trim()) {
-    apiMessages.push({ role: 'system', content: STATE.settings.systemPrompt.trim() });
+  const sysP = getSystemPrompt();
+  if (sysP) {
+    apiMessages.push({ role: 'system', content: sysP });
   }
   chat.messages.forEach(m => apiMessages.push({ role: m.role, content: m.content }));
 
@@ -902,7 +931,7 @@ async function sendGodMode() {
   const results = {};
   const startTimes = {};
 
-  GODMODE_MODELS.forEach(model => {
+  selectedGodModeModels.forEach(model => {
     startTimes[model.id] = Date.now();
     results[model.id] = '';
 
@@ -923,7 +952,7 @@ async function sendGodMode() {
         </div>
       </div>
       <div class="godmode-card-footer">
-        <span style="font-size:11px;color:var(--text-muted);">⚡ ${model.name}</span>
+        <span style="font-size:11px;color:var(--text-muted);">${model.name}</span>
         <button class="godmode-pick-btn" id="pick-${model.id.replace(/[\/:.]/g,'_')}">Auswählen</button>
       </div>`;
     gridEl.appendChild(card);
@@ -934,10 +963,10 @@ async function sendGodMode() {
   scrollToBottom();
 
   // Fire all models in parallel
-  const promises = GODMODE_MODELS.map(model => streamGodModeModel(model, apiMessages, results, startTimes));
+  const promises = selectedGodModeModels.map(model => streamGodModeModel(model, apiMessages, results, startTimes));
 
   // Add pick button handlers
-  GODMODE_MODELS.forEach(model => {
+  selectedGodModeModels.forEach(model => {
     const safeId = model.id.replace(/[\/:.]/g, '_');
     const pickBtn = document.getElementById(`pick-${safeId}`);
     if (pickBtn) {
@@ -951,11 +980,11 @@ async function sendGodMode() {
         syncChatToServer(STATE.activeChatId);
 
         // Mark as picked
-        pickBtn.textContent = '✓ Gewählt';
+        pickBtn.textContent = 'Gewählt';
         pickBtn.classList.add('picked');
 
         // Disable all other pick buttons
-        GODMODE_MODELS.forEach(m => {
+        selectedGodModeModels.forEach(m => {
           const otherId = m.id.replace(/[\/:.]/g, '_');
           const otherBtn = document.getElementById(`pick-${otherId}`);
           if (otherBtn && m.id !== model.id) {
@@ -964,7 +993,7 @@ async function sendGodMode() {
           }
         });
 
-        showToast(`${model.name} Antwort gespeichert ✓`, 'success');
+        showToast(`${model.name} Antwort gespeichert`, 'success');
       });
     }
   });
@@ -987,7 +1016,7 @@ async function streamGodModeModel(model, messages, results, startTimes) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Custom-Key': STATE.settings.apiKey || '',
+        'Authorization': AUTH.sessionToken ? `Bearer ${AUTH.sessionToken}` : '',
       },
       body: JSON.stringify({
         model: model.id,
@@ -1075,6 +1104,7 @@ function updateCharCounter() {
 
 function openSettingsModal() {
   els.apiKeyInput.value = STATE.settings.apiKey;
+  els.nicknameInput.value = STATE.settings.nickname || '';
   els.systemPromptInput.value = STATE.settings.systemPrompt;
   els.maxTokensInput.value = STATE.settings.maxTokens;
   els.tempSlider.value = STATE.settings.temperature;
@@ -1152,6 +1182,7 @@ function saveSettings() {
   if (newKey) {
     STATE.settings.apiKey = newKey;
   }
+  STATE.settings.nickname = els.nicknameInput.value.trim();
   STATE.settings.systemPrompt = els.systemPromptInput.value;
   STATE.settings.maxTokens    = parseInt(els.maxTokensInput.value) || 8192;
   STATE.settings.temperature  = parseFloat(els.tempSlider.value);
@@ -1159,7 +1190,7 @@ function saveSettings() {
   if (els.voiceNameSelect) STATE.settings.voiceVoice = els.voiceNameSelect.value;
   saveToStorage();
   closeSettingsModal();
-  showToast('Einstellungen gespeichert ✓', 'success');
+  showToast('Einstellungen gespeichert', 'success');
 }
 
 function updateModelBadge() {
@@ -1222,7 +1253,7 @@ function exportChat() {
   a.href = URL.createObjectURL(blob);
   a.download = `${chat.title.replace(/[^a-z0-9äöüß\s]/gi, '').slice(0, 40)}.md`;
   a.click();
-  showToast('Chat als Markdown exportiert ✓', 'success');
+  showToast('Chat als Markdown exportiert', 'success');
 }
 
 /* =============================================
@@ -1277,12 +1308,12 @@ function attachEvents() {
   const godmodeBtn = document.getElementById('godmode-btn');
   if (godmodeBtn) {
     godmodeBtn.addEventListener('click', () => {
-      godModeActive = !godModeActive;
-      godmodeBtn.classList.toggle('active', godModeActive);
       if (godModeActive) {
-        showToast('⚡ GOD MODE AKTIVIERT — 4 KIs kämpfen um die beste Antwort!', 'success');
-      } else {
+        godModeActive = false;
+        godmodeBtn.classList.remove('active');
         showToast('God Mode deaktiviert', '');
+      } else {
+        openGodModeModal();
       }
     });
   }
@@ -1340,7 +1371,7 @@ function attachEvents() {
     STATE.settings.systemPrompt = els.systemPromptQuick.value;
     saveToStorage();
     els.systemPromptModal.classList.add('hidden');
-    showToast('System-Prompt aktualisiert ✓', 'success');
+    showToast('System-Prompt aktualisiert', 'success');
   });
   els.systemPromptModal.addEventListener('click', (e) => {
     if (e.target === els.systemPromptModal) els.systemPromptModal.classList.add('hidden');
@@ -1380,14 +1411,53 @@ function attachEvents() {
   els.subscriptionModal.addEventListener('click', (e) => {
     if (e.target === els.subscriptionModal) els.subscriptionModal.classList.add('hidden');
   });
-  document.querySelectorAll('.sub-btn').forEach(btn => {
+  document.querySelectorAll('.sub-btn-contact').forEach(btn => {
     btn.addEventListener('click', () => {
       const plan = btn.dataset.plan;
       const price = btn.dataset.price;
       els.subscriptionModal.classList.add('hidden');
-      showToast(`Demo-Modus: '${plan}' (${price}) ist in dieser Vorschau nicht kaufbar.`, 'error');
+      // Contact Modal öffnen
+      const contactModal = $('contact-modal');
+      $('contact-plan-name').textContent = plan;
+      $('contact-plan-price').textContent = price + '/Monat';
+      // WhatsApp Link mit Plan-Info
+      const waLink = $('whatsapp-link');
+      waLink.href = `https://wa.me/4915738372862?text=Hallo%2C%20ich%20m%C3%B6chte%20Nexora%20${encodeURIComponent(plan)}%20(${encodeURIComponent(price)})%20bestellen!%20Meine%20E-Mail%3A%20${encodeURIComponent(AUTH.currentUser?.email || '')}`;
+      contactModal.classList.remove('hidden');
     });
   });
+
+  // Contact Modal Events
+  const contactModal = $('contact-modal');
+  const closeContactModal = $('close-contact-modal');
+  if (closeContactModal) {
+    closeContactModal.addEventListener('click', () => contactModal.classList.add('hidden'));
+  }
+  if (contactModal) {
+    contactModal.addEventListener('click', (e) => {
+      if (e.target === contactModal) contactModal.classList.add('hidden');
+    });
+  }
+
+  // Sidebar Upgrade Button
+  const sidebarUpgradeBtn = $('sidebar-upgrade-btn');
+  if (sidebarUpgradeBtn) {
+    sidebarUpgradeBtn.addEventListener('click', () => {
+      els.subscriptionModal.classList.remove('hidden');
+    });
+  }
+
+  // Copy API Key Button
+  const copyApiKeyBtn = $('copy-api-key');
+  if (copyApiKeyBtn) {
+    copyApiKeyBtn.addEventListener('click', () => {
+      if (STATE.userApiKey) {
+        navigator.clipboard.writeText(STATE.userApiKey).then(() => {
+          showToast('API-Key kopiert!', 'success');
+        });
+      }
+    });
+  }
 
   // Feedback Channel event
   els.feedbackChannelBtn.addEventListener('click', switchToFeedbackChannel);
@@ -1445,6 +1515,54 @@ let speechRecognition = null;
 let isRecording = false;
 
 /* =============================================
+   GOD MODE MODAL
+   ============================================= */
+
+function openGodModeModal() {
+  const modal = document.getElementById('godmode-modal');
+  const list = document.getElementById('godmode-models-list');
+  list.innerHTML = '';
+  
+  const allModels = Array.from(document.querySelectorAll('#model-select option'));
+  allModels.forEach((opt) => {
+    const isSelected = selectedGodModeModels.some(m => m.id === opt.value);
+    const div = document.createElement('div');
+    // Remove emojis from the name if any are left
+    const name = opt.text.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2B50}\u{1F525}\u{1F4BB}\u{1F4DA}\u{1F310}\u{1F393}\u{1F40D}\u{269B}\u{1F433}\u{1F50D}\u{2705}\u{1F4AC}\u{1F511}\u{1F48E}\u{1F451}\u{1F50A}\u{1F4DE}\u{1F4F1}\u{1F4F7}\u{2728}\u{2B50}\u{FE0F}]/gu, '').trim();
+    div.innerHTML = `<label style="display: flex; gap: 8px; align-items: center; cursor: pointer;">
+      <input type="checkbox" value="${opt.value}" data-name="${name}" ${isSelected ? 'checked' : ''}>
+      ${name}
+    </label>`;
+    list.appendChild(div);
+  });
+  
+  document.getElementById('start-godmode-btn').onclick = () => {
+    const checks = Array.from(list.querySelectorAll('input:checked'));
+    if (checks.length === 0 || checks.length > 4) {
+      showToast('Bitte wähle 1 bis 4 Modelle', 'error');
+      return;
+    }
+    const colors = ['#4285f4', '#8b5cf6', '#06b6d4', '#f59e0b'];
+    selectedGodModeModels = checks.map((c, i) => {
+      return { id: c.value, name: c.dataset.name, color: colors[i % colors.length] };
+    });
+    godModeActive = true;
+    document.getElementById('godmode-btn').classList.add('active');
+    showToast('GOD MODE AKTIVIERT – Modelle ausgewählt!', 'success');
+    modal.classList.add('hidden');
+  };
+  
+  document.getElementById('cancel-godmode-btn').onclick = () => {
+    modal.classList.add('hidden');
+  };
+  document.getElementById('close-godmode-modal').onclick = () => {
+    modal.classList.add('hidden');
+  };
+  
+  modal.classList.remove('hidden');
+}
+
+/* =============================================
    INIT
    ============================================= */
 
@@ -1484,12 +1602,12 @@ Deine Kernkompetenzen:
 - Nutze immer Markdown-Formatierung
 - Sei präzise und hilfreich in deinen Antworten`,
     suggestions: [
-      { icon: '⚡', label: 'Async/Await erklären', prompt: 'Erkläre mir Async/Await in JavaScript mit Beispielen.' },
-      { icon: '🐍', label: 'Python API-Funktion', prompt: 'Schreibe mir eine Python-Funktion die eine REST API aufruft und die Antwort als JSON zurückgibt.' },
-      { icon: '⚛️', label: 'React Custom Hook', prompt: 'Wie schreibe ich einen effizienten React Hook für Datenabruf mit Caching?' },
-      { icon: '🐳', label: 'Docker Compose Setup', prompt: 'Erstelle mir eine vollständige Docker Compose Konfiguration für eine Node.js App mit PostgreSQL und Redis.' },
-      { icon: '🔍', label: 'Code Review', prompt: 'Reviewed meinen Code und gib mir Verbesserungsvorschläge für Clean Code und Performance.' },
-      { icon: '✅', label: 'Unit Tests schreiben', prompt: 'Schreibe unit tests für meine TypeScript-Funktionen mit Jest.' },
+      { icon: '', label: 'Async/Await erklären', prompt: 'Erkläre mir Async/Await in JavaScript mit Beispielen.' },
+      { icon: '', label: 'Python API-Funktion', prompt: 'Schreibe mir eine Python-Funktion die eine REST API aufruft und die Antwort als JSON zurückgibt.' },
+      { icon: '', label: 'React Custom Hook', prompt: 'Wie schreibe ich einen effizienten React Hook für Datenabruf mit Caching?' },
+      { icon: '', label: 'Docker Compose Setup', prompt: 'Erstelle mir eine vollständige Docker Compose Konfiguration für eine Node.js App mit PostgreSQL und Redis.' },
+      { icon: '', label: 'Code Review', prompt: 'Reviewed meinen Code und gib mir Verbesserungsvorschläge für Clean Code und Performance.' },
+      { icon: '', label: 'Unit Tests schreiben', prompt: 'Schreibe unit tests für meine TypeScript-Funktionen mit Jest.' },
     ]
   },
   homework: {
@@ -1504,12 +1622,12 @@ Deine Aufgabe:
 - Nutze Markdown für Formeln und Strukturierung
 - Motiviere und ermutige den Schüler`,
     suggestions: [
-      { icon: '📐', label: 'Mathe: Bruchrechnen', prompt: 'Erkläre mir Schritt für Schritt wie Bruchrechnen funktioniert mit Beispielen.' },
-      { icon: '📝', label: 'Deutsch: Aufsatz', prompt: 'Hilf mir einen Aufsatz über das Thema "Mein Lieblingsbuch" zu strukturieren.' },
-      { icon: '🌍', label: 'Erdkunde: Klimazonen', prompt: 'Erkläre mir die verschiedenen Klimazonen der Erde mit ihren Merkmalen.' },
-      { icon: '🔬', label: 'Biologie: Zelle', prompt: 'Beschreibe den Aufbau einer pflanzlichen Zelle und erkläre die Funktion jedes Teils.' },
-      { icon: '📖', label: 'Geschichte: Antikes Rom', prompt: 'Fasse die wichtigsten Ereignisse des antiken Roms zusammen für meine Geschichtshausarbeit.' },
-      { icon: '🇬🇧', label: 'Englisch: Grammatik', prompt: 'Erkläre mir den Unterschied zwischen Simple Past und Present Perfect mit Beispielen.' },
+      { icon: '', label: 'Mathe: Bruchrechnen', prompt: 'Erkläre mir Schritt für Schritt wie Bruchrechnen funktioniert mit Beispielen.' },
+      { icon: '', label: 'Deutsch: Aufsatz', prompt: 'Hilf mir einen Aufsatz über das Thema "Mein Lieblingsbuch" zu strukturieren.' },
+      { icon: '', label: 'Erdkunde: Klimazonen', prompt: 'Erkläre mir die verschiedenen Klimazonen der Erde mit ihren Merkmalen.' },
+      { icon: '', label: 'Biologie: Zelle', prompt: 'Beschreibe den Aufbau einer pflanzlichen Zelle und erkläre die Funktion jedes Teils.' },
+      { icon: '', label: 'Geschichte: Antikes Rom', prompt: 'Fasse die wichtigsten Ereignisse des antiken Roms zusammen für meine Geschichtshausarbeit.' },
+      { icon: '', label: 'Englisch: Grammatik', prompt: 'Erkläre mir den Unterschied zwischen Simple Past und Present Perfect mit Beispielen.' },
     ]
   },
   code: {
@@ -1528,12 +1646,12 @@ Formatierungsregeln:
 - Nutze Markdown für Strukturierung
 - Sei präzise und technisch korrekt`,
     suggestions: [
-      { icon: '💡', label: 'JavaScript Grundlagen', prompt: 'Erkläre mir die wichtigsten ES6+ Features in JavaScript mit Codebeispielen.' },
-      { icon: '🏗️', label: 'REST API bauen', prompt: 'Zeige mir wie ich eine vollständige REST API mit Node.js und Express aufbaue.' },
-      { icon: '🗃️', label: 'SQL Datenbank', prompt: 'Erstelle ein SQL-Datenbankschema für einen Online-Shop mit Produkten, Kunden und Bestellungen.' },
-      { icon: '🐛', label: 'Debugging-Tipps', prompt: 'Was sind die besten Debugging-Strategien und Tools für JavaScript-Entwickler?' },
-      { icon: '⚙️', label: 'Git Workflow', prompt: 'Erkläre mir einen professionellen Git-Workflow mit Branching-Strategie für Teams.' },
-      { icon: '🚀', label: 'Performance-Optimierung', prompt: 'Welche Techniken gibt es um die Performance einer React-Anwendung zu optimieren?' },
+      { icon: '', label: 'JavaScript Grundlagen', prompt: 'Erkläre mir die wichtigsten ES6+ Features in JavaScript mit Codebeispielen.' },
+      { icon: '', label: 'REST API bauen', prompt: 'Zeige mir wie ich eine vollständige REST API mit Node.js und Express aufbaue.' },
+      { icon: '', label: 'SQL Datenbank', prompt: 'Erstelle ein SQL-Datenbankschema für einen Online-Shop mit Produkten, Kunden und Bestellungen.' },
+      { icon: '', label: 'Debugging-Tipps', prompt: 'Was sind die besten Debugging-Strategien und Tools für JavaScript-Entwickler?' },
+      { icon: '', label: 'Git Workflow', prompt: 'Erkläre mir einen professionellen Git-Workflow mit Branching-Strategie für Teams.' },
+      { icon: '', label: 'Performance-Optimierung', prompt: 'Welche Techniken gibt es um die Performance einer React-Anwendung zu optimieren?' },
     ]
   },
   teacher: {
@@ -1549,12 +1667,12 @@ Deine Aufgabe:
 - Nutze eine professionelle, pädagogische Sprache
 - Beachte den deutschen Lehrplan und Bildungsstandards`,
     suggestions: [
-      { icon: '📋', label: 'Arbeitsblatt erstellen', prompt: 'Erstelle ein Arbeitsblatt zum Thema Bruchrechnen für die 6. Klasse mit 10 Aufgaben in aufsteigender Schwierigkeit.' },
-      { icon: '📊', label: 'Klausur vorbereiten', prompt: 'Erstelle eine Deutsch-Klausur für die 10. Klasse zum Thema Erörterung mit Bewertungskriterien.' },
-      { icon: '✉️', label: 'Elternbrief schreiben', prompt: 'Schreibe einen professionellen Elternbrief über einen bevorstehenden Schulausflug mit allen wichtigen Informationen.' },
-      { icon: '📅', label: 'Unterrichtsplan', prompt: 'Erstelle einen detaillierten Unterrichtsplan für eine Doppelstunde Biologie zum Thema Fotosynthese.' },
-      { icon: '💬', label: 'Zeugniskommentar', prompt: 'Formuliere 5 verschiedene positive Zeugniskommentare für Schüler mit unterschiedlichen Stärken.' },
-      { icon: '🎯', label: 'Differenzierte Aufgaben', prompt: 'Erstelle zum Thema "Lineare Funktionen" differenzierte Aufgaben für drei Leistungsniveaus (Basis, Mittel, Experte).' },
+      { icon: '', label: 'Arbeitsblatt erstellen', prompt: 'Erstelle ein Arbeitsblatt zum Thema Bruchrechnen für die 6. Klasse mit 10 Aufgaben in aufsteigender Schwierigkeit.' },
+      { icon: '', label: 'Klausur vorbereiten', prompt: 'Erstelle eine Deutsch-Klausur für die 10. Klasse zum Thema Erörterung mit Bewertungskriterien.' },
+      { icon: '', label: 'Elternbrief schreiben', prompt: 'Schreibe einen professionellen Elternbrief über einen bevorstehenden Schulausflug mit allen wichtigen Informationen.' },
+      { icon: '', label: 'Unterrichtsplan', prompt: 'Erstelle einen detaillierten Unterrichtsplan für eine Doppelstunde Biologie zum Thema Fotosynthese.' },
+      { icon: '', label: 'Zeugniskommentar', prompt: 'Formuliere 5 verschiedene positive Zeugniskommentare für Schüler mit unterschiedlichen Stärken.' },
+      { icon: '', label: 'Differenzierte Aufgaben', prompt: 'Erstelle zum Thema "Lineare Funktionen" differenzierte Aufgaben für drei Leistungsniveaus (Basis, Mittel, Experte).' },
     ]
   },
 };
@@ -1620,7 +1738,7 @@ function setTheme(theme) {
   }
   localStorage.setItem('nexora_theme', theme);
   updateThemeButtons(theme);
-  showToast(theme === 'light' ? 'Helles Design aktiviert ☀️' : 'Dunkles Design aktiviert 🌙', 'success');
+  showToast(theme === 'light' ? 'Helles Design aktiviert' : 'Dunkles Design aktiviert', 'success');
 }
 
 function updateThemeButtons(theme) {
@@ -1721,7 +1839,7 @@ async function sendFeedback() {
     
     await loadFeedback();
     els.feedbackInput.value = '';
-    showToast('Feedback gesendet! ✓', 'success');
+    showToast('Feedback gesendet!', 'success');
 
   } catch (err) {
     console.error('Error posting feedback, saving locally:', err);
@@ -1738,7 +1856,7 @@ async function sendFeedback() {
     localStorage.setItem('offline_feedback', JSON.stringify(offline));
     renderFeedback(offline);
     els.feedbackInput.value = '';
-    showToast('Feedback lokal gespeichert ✓', 'success');
+    showToast('Feedback lokal gespeichert', 'success');
   } finally {
     els.sendFeedbackBtn.disabled = true;
     els.feedbackInput.disabled = false;
@@ -1776,7 +1894,7 @@ function toggleVoiceInput() {
     isRecording = true;
     els.micBtn.classList.add('recording');
     els.micBtn.title = 'Aufnahme stoppen';
-    showToast('🎙️ Spracherkennung aktiv – sprich jetzt...', 'success');
+    showToast('Spracherkennung aktiv – sprich jetzt...', 'success');
   };
 
   speechRecognition.onresult = (event) => {
@@ -2043,12 +2161,12 @@ async function submitVoiceMessage(text) {
   
   try {
     const messages = [];
-    let sysPrompt = STATE.settings.systemPrompt.trim();
+    let sysPrompt = getSystemPrompt();
     if (sysPrompt) {
       sysPrompt += "\n\nWICHTIG: Da wir uns im Voice-Modus befinden, antworte extrem kurz, bündig und gesprächig. Maximal 1-3 kurze Sätze! Keine langen Listen oder Aufzählungen.";
       messages.push({ role: 'system', content: sysPrompt });
     } else {
-      messages.push({ role: 'system', content: "Antworte extrem kurz, bündig und gesprächig. Maximal 1-3 kurze Sätze!" });
+      messages.push({ role: 'system', content: "WICHTIG: Da wir uns im Voice-Modus befinden, antworte extrem kurz, bündig und gesprächig. Maximal 1-3 kurze Sätze! Keine langen Listen oder Aufzählungen." });
     }
     if (chat) {
       chat.messages.forEach(m => messages.push({ role: m.role, content: m.content }));
@@ -2058,6 +2176,7 @@ async function submitVoiceMessage(text) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': AUTH.sessionToken ? `Bearer ${AUTH.sessionToken}` : '',
       },
       signal: voiceAbortController.signal,
       body: JSON.stringify({
@@ -2413,3 +2532,96 @@ function stopAIVoiceAnimation() {
 
 // Start application
 init();
+
+/* =============================================
+   USER API-KEY & USAGE MANAGEMENT
+   ============================================= */
+
+async function loadUserApiKey() {
+  if (!AUTH.sessionToken || AUTH.currentUser?.isGuest) return;
+  try {
+    const res = await fetch('/api/user/api-key', {
+      headers: { 'Authorization': `Bearer ${AUTH.sessionToken}` },
+    });
+    if (!res.ok) {
+      console.warn('API-Key nicht gefunden');
+      return;
+    }
+    const data = await res.json();
+    STATE.userApiKey = data.key;
+    STATE.userTier = data.tier || 'free';
+    STATE.usageToday = data.usage_today || 0;
+    STATE.dailyLimit = data.daily_limit || 20;
+    STATE.balance = data.balance || 0;
+    updateUsageDisplay();
+  } catch (e) {
+    console.warn('Fehler beim Laden des API-Keys:', e);
+  }
+}
+
+function updateUsageDisplay() {
+  const section = $('api-key-section');
+  if (!section) return;
+
+  // Show section for logged-in users
+  if (AUTH.currentUser && !AUTH.currentUser.isGuest) {
+    section.classList.remove('hidden');
+  } else {
+    section.classList.add('hidden');
+    return;
+  }
+
+  // Update API Key display
+  const keyEl = $('api-key-value');
+  if (keyEl && STATE.userApiKey) {
+    keyEl.textContent = STATE.userApiKey.substring(0, 14) + '...';
+  }
+
+  // Update Tier Badge
+  const badgeEl = $('tier-badge');
+  if (badgeEl) {
+    badgeEl.className = 'tier-badge';
+    if (STATE.userTier === 'pro') {
+      badgeEl.textContent = 'PRO';
+      badgeEl.classList.add('tier-pro');
+    } else if (STATE.userTier === 'basic') {
+      badgeEl.textContent = 'BASIC';
+      badgeEl.classList.add('tier-basic');
+    } else {
+      badgeEl.textContent = 'FREE';
+      badgeEl.classList.add('tier-free');
+    }
+  }
+
+  // Update Usage Counter
+  const usageEl = $('usage-count');
+  const barEl = $('usage-bar-fill');
+  if (usageEl) {
+    usageEl.textContent = `${STATE.balance} Credits`;
+  }
+  if (barEl) {
+    barEl.style.width = '100%';
+    barEl.style.background = 'var(--accent)';
+  }
+
+  // Update sidebar upgrade button visibility
+  const upgradeBtn = $('sidebar-upgrade-btn');
+  if (upgradeBtn) {
+    upgradeBtn.classList.toggle('hidden', STATE.userTier === 'pro');
+  }
+
+  // Update subscription modal active plan
+  const freeCard = $('sub-card-free');
+  if (freeCard) {
+    const currentBtn = freeCard.querySelector('.sub-btn-current');
+    if (currentBtn) {
+      if (STATE.userTier === 'free') {
+        currentBtn.textContent = 'Dein aktuelles Abo';
+        currentBtn.disabled = true;
+      } else {
+        currentBtn.textContent = 'Inkludiert';
+        currentBtn.disabled = true;
+      }
+    }
+  }
+}
