@@ -51,9 +51,9 @@ saveDB();
 //   ADMIN CONFIG
 // =============================================
 
-const ADMIN_USERNAME = 'Sagvan/admin';
-const ADMIN_PASSWORD = 'Nexora2026';
-const OPENROUTER_API_KEY = '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';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'Sagvan/admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Nexora2026';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 
 function adminAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -65,6 +65,27 @@ function adminAuth(req, res, next) {
   if (!session) {
     return res.status(401).json({ error: 'Ungültiger Admin-Token' });
   }
+  next();
+}
+
+// Benutzer-Authentifizierung Middleware
+function userAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentifizierung erforderlich. Bitte melde dich an.' });
+  }
+  const token = authHeader.split(' ')[1];
+  const session = db.sessions.find(s => s.token === token);
+  if (!session) return res.status(401).json({ error: 'Ungültige oder abgelaufene Session.' });
+  // Session-Ablauf: 7 Tage
+  if (Date.now() - session.created_at > 7 * 24 * 60 * 60 * 1000) {
+    db.sessions = db.sessions.filter(s => s.token !== token);
+    saveDB();
+    return res.status(401).json({ error: 'Session abgelaufen. Bitte erneut anmelden.' });
+  }
+  const user = db.users.find(u => u.id === session.user_id);
+  if (!user) return res.status(401).json({ error: 'Benutzer nicht gefunden.' });
+  req.user = user;
   next();
 }
 
@@ -96,11 +117,36 @@ function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// IP-basiertes Rate Limiting
+const ipRateLimits = {};
+function checkIPRateLimit(ip, action, maxAttempts, windowMs) {
+  const key = `${ip}:${action}`;
+  const now = Date.now();
+  if (!ipRateLimits[key]) ipRateLimits[key] = [];
+  ipRateLimits[key] = ipRateLimits[key].filter(t => now - t < windowMs);
+  if (ipRateLimits[key].length >= maxAttempts) return false;
+  ipRateLimits[key].push(now);
+  return true;
+}
+// Alte Einträge alle 10 Minuten bereinigen
+setInterval(() => {
+  const now = Date.now();
+  for (const key in ipRateLimits) {
+    ipRateLimits[key] = ipRateLimits[key].filter(t => now - t < 3600000);
+    if (ipRateLimits[key].length === 0) delete ipRateLimits[key];
+  }
+}, 600000);
+
 // =============================================
 //   AUTH API ROUTES
 // =============================================
 
 app.post('/api/auth/register', async (req, res) => {
+  const clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  if (!checkIPRateLimit(clientIP, 'register', 5, 3600000)) {
+    return res.status(429).json({ error: 'Zu viele Registrierungen. Bitte warte eine Stunde.' });
+  }
+
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'E-Mail und Passwort sind erforderlich.' });
   if (email.trim().length < 2) return res.status(400).json({ error: 'E-Mail-Adresse ist zu kurz.' });
@@ -119,13 +165,26 @@ app.post('/api/auth/register', async (req, res) => {
       created_at: Date.now()
     };
     db.users.push(user);
-    
+
+    // Automatisch kostenlosen API-Key generieren
+    const autoKey = {
+      id: 'key_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      user_id: user.id,
+      label: 'Free-Tier Auto-Key',
+      key: 'nxr-free-' + crypto.randomBytes(24).toString('hex'),
+      tier: 'free',
+      active: true,
+      balance: 1000,
+      created_at: Date.now(),
+    };
+    db.api_keys.push(autoKey);
+
     const token = generateToken();
     db.sessions.push({ token, user_id: user.id, created_at: Date.now() });
     saveDB();
 
     console.log(`✅ Neuer User registriert: ${user.email}`);
-    res.status(201).json({ token, email: user.email });
+    res.status(201).json({ token, email: user.email, apiKey: autoKey.key, tier: autoKey.tier });
   } catch (err) {
     res.status(500).json({ error: 'Serverfehler bei der Registrierung.' });
   }
@@ -178,6 +237,21 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // =============================================
+//   USER API-KEY & USAGE ENDPOINT
+// =============================================
+
+app.get('/api/user/api-key', userAuth, (req, res) => {
+  const key = db.api_keys.find(k => k.user_id === req.user.id && k.active);
+  if (!key) return res.status(404).json({ error: 'Kein API-Key gefunden. Bitte kontaktiere den Support.' });
+  res.json({
+    key: key.key,
+    tier: key.tier || 'free',
+    balance: key.balance || 0,
+    active: key.active,
+  });
+});
+
+// =============================================
 //   FEEDBACK API
 // =============================================
 
@@ -209,10 +283,37 @@ app.post('/api/feedback', (req, res) => {
 //   AI PROXY ROUTE
 // =============================================
 
-app.post('/api/chat/completions', async (req, res) => {
+app.post('/api/chat/completions', userAuth, async (req, res) => {
   try {
-    const customKey = req.headers['x-custom-key'];
-    const apiKeyToUse = (customKey && customKey !== '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') ? customKey : OPENROUTER_API_KEY;
+    // Rate Limiting & Zugriffskontrolle
+    const userKey = db.api_keys.find(k => k.user_id === req.user.id && k.active);
+    if (!userKey) {
+      return res.status(403).json({ error: { message: 'Kein aktiver API-Key. Bitte kontaktiere den Support.' } });
+    }
+
+    if ((userKey.balance || 0) <= 0) {
+      return res.status(402).json({ error: { message: 'Unzureichendes Guthaben. Bitte laden Sie Ihr Konto auf.' } });
+    }
+
+    // Modellzugriff prüfen
+    const freeModels = [
+      'google/gemma-4-26b-a4b-it:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'deepseek/deepseek-v4-flash:free',
+      'qwen/qwen3-coder:free',
+      'openrouter/free',
+    ];
+    const requestedModel = req.body.model || '';
+    if (userKey.tier === 'free' && !freeModels.includes(requestedModel)) {
+      return res.status(403).json({ error: { message: 'Dieses Modell ist nur für Premium-User verfügbar. Upgrade dein Abo!' } });
+    }
+
+    const inputChars = JSON.stringify(req.body.messages || []).length;
+    const estimatedCost = Math.ceil(inputChars / 100);
+    userKey.balance = (userKey.balance || 0) - estimatedCost;
+    saveDB();
+
+    const apiKeyToUse = OPENROUTER_API_KEY;
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -282,11 +383,18 @@ app.get('/api/admin/dashboard', adminAuth, (req, res) => {
 
 // --- Users ---
 app.get('/api/admin/users', adminAuth, (req, res) => {
-  const users = db.users.map(u => ({
-    id: u.id,
-    username: u.username,
-    created_at: u.created_at,
-  }));
+  const users = db.users.map(u => {
+    const key = db.api_keys.find(k => k.user_id === u.id && k.active);
+    return {
+      id: u.id,
+      username: u.username || u.email,
+      email: u.email,
+      tier: key ? (key.tier || 'free') : 'none',
+      balance: key ? (key.balance || 0) : 0,
+      api_key: key ? key.key : null,
+      created_at: u.created_at,
+    };
+  });
   res.json(users);
 });
 
@@ -318,11 +426,12 @@ app.post('/api/admin/api-keys', adminAuth, (req, res) => {
     label: label || 'API Key',
     key: 'nxr-' + crypto.randomBytes(32).toString('hex'),
     active: true,
+    balance: 1000,
     created_at: Date.now(),
   };
   db.api_keys.push(key);
   saveDB();
-  console.log(`\u{1F511} Neuer API-Key erstellt: ${key.id}`);
+  console.log(`Neuer API-Key erstellt: ${key.id}`);
   res.status(201).json(key);
 });
 
@@ -338,6 +447,39 @@ app.patch('/api/admin/api-keys/:id', adminAuth, (req, res) => {
   key.active = !key.active;
   saveDB();
   res.json(key);
+});
+
+// --- User Tier Verwaltung ---
+app.patch('/api/admin/users/:id/tier', adminAuth, (req, res) => {
+  const { tier } = req.body;
+  if (!['free', 'basic', 'pro'].includes(tier)) {
+    return res.status(400).json({ error: 'Ungültiger Tier. Erlaubt: free, basic, pro' });
+  }
+  const userKey = db.api_keys.find(k => k.user_id === req.params.id && k.active);
+  if (!userKey) {
+    return res.status(404).json({ error: 'Kein API-Key für diesen User gefunden.' });
+  }
+  userKey.tier = tier;
+  saveDB();
+  const user = db.users.find(u => u.id === req.params.id);
+  console.log(`User ${user ? user.email : req.params.id} -> Tier: ${tier}`);
+  res.json({ ok: true, tier });
+});
+
+app.patch('/api/admin/users/:id/balance', adminAuth, (req, res) => {
+  const { balance } = req.body;
+  if (typeof balance !== 'number') {
+    return res.status(400).json({ error: 'Guthaben muss eine Zahl sein.' });
+  }
+  const userKey = db.api_keys.find(k => k.user_id === req.params.id && k.active);
+  if (!userKey) {
+    return res.status(404).json({ error: 'Kein API-Key für diesen User gefunden.' });
+  }
+  userKey.balance = balance;
+  saveDB();
+  const user = db.users.find(u => u.id === req.params.id);
+  console.log(`User ${user ? user.email : req.params.id} -> Guthaben: ${balance}`);
+  res.json({ ok: true, balance: userKey.balance });
 });
 
 // --- Feedback (admin) ---
